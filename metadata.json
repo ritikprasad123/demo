@@ -1,0 +1,5 @@
+{
+  "name": "Sentiment AI Chatbot",
+  "description": "An intelligent AI chatbot that detects and responds to user emotions using sentiment analysis.",
+  "requestFramePermissions": ["microphone"]
+}
