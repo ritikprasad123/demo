@@ -667,31 +667,31 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center p-4 md:p-8 font-sans">
-      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col h-[85vh] border border-slate-200">
+    <div className="min-h-screen flex flex-col items-center p-4 md:p-8 font-sans">
+      <div className="w-full max-w-2xl glass-card rounded-3xl overflow-hidden flex flex-col h-[85vh]">
         {/* Header */}
-        <header className="bg-white border-b border-slate-100 p-6 flex flex-col gap-4">
+        <header className="bg-white/5 border-b border-white/10 p-6 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="bg-indigo-600 p-2 rounded-lg">
-                <MessageSquare className="text-white w-6 h-6" />
+              <div className="bg-indigo-500/20 p-2 rounded-xl border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.3)]">
+                <MessageSquare className="text-indigo-400 w-6 h-6" />
               </div>
               <div>
-                <h1 className="text-xl font-semibold text-slate-900">Sentiment AI v4.0</h1>
-                <p className="text-xs text-slate-500 flex items-center gap-1">
-                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                  EQ Intelligence: Multi-Mode
+                <h1 className="text-xl font-bold aesthetic-gradient-text tracking-tight">Sentiment AI v4.0</h1>
+                <p className="text-[10px] text-slate-400 flex items-center gap-1.5 font-medium uppercase tracking-widest">
+                  <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.5)]"></span>
+                  EQ Intelligence
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <button 
                 onClick={() => isLiveMode ? stopLiveSession() : startLiveSession()}
-                className={`p-2 rounded-lg transition-all flex items-center gap-2 ${isLiveMode ? 'bg-red-100 text-red-600 ring-2 ring-red-400' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}
+                className={`p-2 rounded-xl transition-all flex items-center gap-2 ${isLiveMode ? 'bg-red-500/20 text-red-400 ring-1 ring-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]' : 'bg-white/5 text-slate-400 hover:bg-white/10 border border-white/10'}`}
                 title={isLiveMode ? 'Stop Live Session' : 'Start Gemini Live Voice'}
               >
                 <Radio size={18} className={isLiveMode ? 'animate-pulse' : ''} />
-                {isLiveMode && <span className="text-[10px] font-bold uppercase tracking-wider">{liveStatus}</span>}
+                {isLiveMode && <span className="text-[9px] font-bold uppercase tracking-wider">{liveStatus}</span>}
               </button>
               <button 
                 onClick={() => {
@@ -702,22 +702,22 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
                     if (!isListening) toggleListening();
                   }
                 }}
-                className={`p-2 rounded-lg transition-all ${isHandsFree ? 'bg-blue-100 text-blue-600 ring-2 ring-blue-400' : 'bg-slate-50 text-slate-400'}`}
+                className={`p-2 rounded-xl transition-all ${isHandsFree ? 'bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-white/5 text-slate-400 hover:bg-white/10 border border-white/10'}`}
                 title={isHandsFree ? 'Disable Alexa Mode' : 'Enable Alexa Mode (Hands-Free)'}
               >
                 <Mic size={18} className={isHandsFree ? 'animate-pulse' : ''} />
               </button>
-              <div className="flex items-center bg-slate-50 rounded-lg p-1 border border-slate-100">
+              <div className="flex items-center bg-white/5 rounded-xl p-0.5 border border-white/10">
                 <button 
                   onClick={() => handleExportData('json')}
-                  className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-md transition-all"
+                  className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-white/5 rounded-lg transition-all"
                   title="Export as JSON"
                 >
                   <FileJson size={16} />
                 </button>
                 <button 
                   onClick={() => handleExportData('text')}
-                  className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-md transition-all"
+                  className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-white/5 rounded-lg transition-all"
                   title="Export as Text"
                 >
                   <FileText size={16} />
@@ -725,21 +725,21 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
               </div>
               <button 
                 onClick={() => setIsProfileOpen(true)}
-                className={`p-2 rounded-lg transition-all bg-slate-50 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50`}
+                className={`p-2 rounded-xl transition-all bg-white/5 text-slate-400 hover:text-indigo-400 hover:bg-white/10 border border-white/10`}
                 title="View Emotional Profile"
               >
                 <User size={18} />
               </button>
               <button 
                 onClick={() => setIsVoiceEnabled(!isVoiceEnabled)}
-                className={`p-2 rounded-lg transition-all ${isVoiceEnabled ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-50 text-slate-400'}`}
+                className={`p-2 rounded-xl transition-all ${isVoiceEnabled ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 'bg-white/5 text-slate-400 border border-white/10'}`}
                 title={isVoiceEnabled ? 'Disable Voice Response' : 'Enable Voice Response'}
               >
                 {isVoiceEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
               </button>
               <button 
                 onClick={() => setMessages([])}
-                className="text-xs font-medium text-slate-400 hover:text-slate-600 transition-colors px-2"
+                className="text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-slate-300 transition-colors px-2"
               >
                 Clear
               </button>
@@ -752,16 +752,12 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
               <button
                 key={mode}
                 onClick={() => setAssistantMode(mode)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap border ${
-                  assistantMode === mode 
-                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' 
-                    : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300'
+                className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all whitespace-nowrap border ${
+                  assistantMode === mode
+                    ? 'bg-indigo-500 text-white border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.4)]'
+                    : 'bg-white/5 text-slate-400 border-white/10 hover:border-indigo-500/50'
                 }`}
               >
-                {mode === 'Empathetic' && <Sparkles size={14} />}
-                {mode === 'Professional' && <Target size={14} />}
-                {mode === 'Brutally Honest' && <ShieldAlert size={14} />}
-                {mode === 'Zen' && <Wind size={14} />}
                 {mode}
               </button>
             ))}
@@ -769,37 +765,37 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
         </header>
 
         {/* Chat Area */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50 relative">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-transparent relative">
           {isLiveMode && (
-            <div className="absolute inset-0 z-20 bg-indigo-900/90 backdrop-blur-md flex flex-col items-center justify-center text-white p-8 text-center space-y-8">
+            <div className="absolute inset-0 z-20 bg-slate-950/80 backdrop-blur-2xl flex flex-col items-center justify-center text-white p-8 text-center space-y-8">
               <motion.div 
                 animate={{ 
                   scale: [1, 1.1, 1],
-                  boxShadow: ["0 0 0px rgba(99, 102, 241, 0.4)", "0 0 40px rgba(99, 102, 241, 0.8)", "0 0 0px rgba(99, 102, 241, 0.4)"]
+                  boxShadow: ["0 0 0px rgba(99, 102, 241, 0.4)", "0 0 60px rgba(99, 102, 241, 0.6)", "0 0 0px rgba(99, 102, 241, 0.4)"]
                 }}
                 transition={{ repeat: Infinity, duration: 2 }}
-                className="w-32 h-32 bg-indigo-500 rounded-full flex items-center justify-center border-4 border-indigo-400"
+                className="w-32 h-32 bg-indigo-500/20 rounded-full flex items-center justify-center border-2 border-indigo-500/50"
               >
-                <Radio size={48} className="animate-pulse" />
+                <Radio size={48} className="text-indigo-400 animate-pulse" />
               </motion.div>
               
               <div className="space-y-2">
-                <h2 className="text-2xl font-bold">Gemini Live Active</h2>
-                <p className="text-indigo-200 text-sm max-w-xs">
+                <h2 className="text-2xl font-bold aesthetic-gradient-text">Gemini Live Active</h2>
+                <p className="text-slate-400 text-sm max-w-xs">
                   {liveStatus === 'connecting' ? 'Establishing secure voice link...' : 'I am listening. Speak naturally, and I will respond in real-time.'}
                 </p>
               </div>
 
               <div className="flex gap-4">
-                <div className="flex items-center gap-2 px-4 py-2 bg-white/10 rounded-full border border-white/20">
+                <div className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-full border border-white/10">
                   <div className="w-2 h-2 bg-green-400 rounded-full animate-ping" />
-                  <span className="text-xs font-medium">Real-time EQ Active</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Live EQ Active</span>
                 </div>
               </div>
 
               <button 
                 onClick={stopLiveSession}
-                className="mt-8 flex items-center gap-2 px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold transition-all shadow-lg"
+                className="mt-8 flex items-center gap-2 px-6 py-3 bg-red-500/80 hover:bg-red-600 text-white rounded-2xl font-bold transition-all shadow-[0_0_20px_rgba(239,68,68,0.3)] uppercase tracking-widest text-xs"
               >
                 <Power size={18} />
                 End Session
@@ -808,15 +804,13 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
           )}
 
           {messages.length === 0 && !isLiveMode && (
-            <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-60">
-              <div className="bg-white p-4 rounded-full shadow-sm">
-                <Smile className="w-12 h-12 text-indigo-400" />
+            <div className="h-full flex flex-col items-center justify-center text-center space-y-6 opacity-40">
+              <div className="bg-white/5 p-6 rounded-3xl border border-white/10 shadow-inner">
+                <Smile className="w-16 h-16 text-indigo-400/50" />
               </div>
-              <div className="max-w-xs">
-                <h2 className="text-lg font-medium text-slate-700">Hey there! How are you doing?</h2>
-                <p className="text-sm text-slate-500 mt-2">
-                  I'm your friendly AI companion. Share your thoughts, and I'll be here to listen and support you!
-                </p>
+              <div className="space-y-2">
+                <p className="text-xl font-medium text-slate-300">Hello, I'm your EQ companion.</p>
+                <p className="text-sm text-slate-500">How are you feeling today?</p>
               </div>
             </div>
           )}
@@ -831,10 +825,10 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
               >
                 <div className={`max-w-[85%] space-y-2`}>
                   <div
-                    className={`p-4 rounded-2xl shadow-sm relative group ${
+                    className={`p-4 rounded-3xl shadow-lg relative group ${
                       msg.role === 'user'
-                        ? 'bg-indigo-600 text-white rounded-tr-none'
-                        : 'bg-white text-slate-800 border border-slate-100 rounded-tl-none'
+                        ? 'bg-indigo-600 text-white rounded-tr-none shadow-indigo-500/20'
+                        : 'bg-white/5 text-slate-200 border border-white/10 rounded-tl-none backdrop-blur-md'
                     }`}
                   >
                     <p className="text-sm leading-relaxed">{msg.content}</p>
@@ -843,13 +837,13 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
                       <div className="absolute -right-12 top-0 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
                           onClick={() => handleFeedback(msg.id, 'helpful')}
-                          className={`p-1.5 rounded-lg border transition-all ${msg.feedback === 'helpful' ? 'bg-green-100 border-green-200 text-green-600' : 'bg-white border-slate-100 text-slate-400 hover:text-green-500'}`}
+                          className={`p-1.5 rounded-xl border transition-all ${msg.feedback === 'helpful' ? 'bg-green-500/20 border-green-500/30 text-green-400' : 'bg-white/5 border-white/10 text-slate-500 hover:text-green-400'}`}
                         >
                           <ThumbsUp size={14} />
                         </button>
                         <button 
                           onClick={() => handleFeedback(msg.id, 'unhelpful')}
-                          className={`p-1.5 rounded-lg border transition-all ${msg.feedback === 'unhelpful' ? 'bg-red-100 border-red-200 text-red-600' : 'bg-white border-slate-100 text-slate-400 hover:text-red-500'}`}
+                          className={`p-1.5 rounded-xl border transition-all ${msg.feedback === 'unhelpful' ? 'bg-red-500/20 border-red-500/30 text-red-400' : 'bg-white/5 border-white/10 text-slate-500 hover:text-red-400'}`}
                         >
                           <ThumbsDown size={14} />
                         </button>
@@ -904,9 +898,9 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
               animate={{ opacity: 1 }}
               className="flex justify-start"
             >
-              <div className="bg-white p-4 rounded-2xl rounded-tl-none border border-slate-100 shadow-sm flex items-center gap-2">
-                <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
-                <span className="text-xs text-slate-500 font-medium italic">Analyzing emotions...</span>
+              <div className="bg-white/5 p-4 rounded-3xl rounded-tl-none border border-white/10 shadow-sm flex items-center gap-3 backdrop-blur-md">
+                <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest italic">Analyzing essence...</span>
               </div>
             </motion.div>
           )}
@@ -914,21 +908,21 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
         </div>
 
         {/* Input Area */}
-        <div className="p-6 bg-white border-t border-slate-100">
-          <div className="relative flex items-center gap-2">
+        <div className="p-6 bg-white/5 border-t border-white/10 backdrop-blur-xl">
+          <div className="relative flex items-center gap-3">
             <button
               onClick={toggleListening}
-              className={`p-3 rounded-xl transition-all ${
+              className={`p-3 rounded-2xl transition-all ${
                 isListening
-                  ? 'bg-red-100 text-red-600 animate-pulse'
-                  : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+                  ? 'bg-red-500/20 text-red-400 animate-pulse ring-1 ring-red-500/50'
+                  : 'bg-white/5 text-slate-500 hover:bg-white/10 border border-white/10'
               }`}
               title={isListening ? 'Stop Listening' : 'Start Voice Input'}
             >
               {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
             </button>
             <div className="relative flex-1 flex items-center">
-              <div className="absolute left-3 z-10 flex items-center pointer-events-none">
+              <div className="absolute left-4 z-10 flex items-center pointer-events-none">
                 <AnimatePresence mode="wait">
                   {isAnalyzingRealtime ? (
                     <motion.div
@@ -958,25 +952,25 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                 placeholder={isListening ? "Listening..." : "Type how you're feeling..."}
-                className={`w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all ${realtimeEmotion || isAnalyzingRealtime ? 'pl-10' : 'pl-4'}`}
+                className={`w-full glass-input rounded-2xl py-4 pr-14 text-sm text-white placeholder-slate-500 ${realtimeEmotion || isAnalyzingRealtime ? 'pl-12' : 'pl-5'}`}
                 disabled={isLoading}
               />
               <button
                 onClick={handleSend}
                 disabled={!input.trim() || isLoading}
-                className={`absolute right-2 p-2 rounded-lg transition-all ${
+                className={`absolute right-3 p-2 rounded-xl transition-all ${
                   !input.trim() || isLoading
-                    ? 'text-slate-300'
-                    : 'text-indigo-600 hover:bg-indigo-50'
+                    ? 'text-slate-600'
+                    : 'text-indigo-400 hover:bg-indigo-500/20'
                 }`}
               >
                 <Send className="w-5 h-5" />
               </button>
             </div>
           </div>
-          <div className="mt-3 flex items-center gap-2 text-[10px] text-slate-400">
-            <Info size={12} />
-            <span>AI analyzes your sentiment to provide empathetic support.</span>
+          <div className="mt-4 flex items-center gap-2 text-[9px] text-slate-500 font-bold uppercase tracking-widest">
+            <Sparkles size={12} className="text-indigo-500" />
+            <span>AI Essence Analysis Active</span>
           </div>
         </div>
       </div>
@@ -988,24 +982,24 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-50 flex items-center justify-center p-4"
             onClick={() => setIsProfileOpen(false)}
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200"
+              className="glass-card rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-indigo-600 text-white">
+              <div className="p-6 border-b border-white/10 flex items-center justify-between bg-indigo-600/20">
                 <div className="flex items-center gap-3">
-                  <User className="w-6 h-6" />
-                  <h2 className="text-xl font-semibold">Emotional Profile</h2>
+                  <User className="w-6 h-6 text-indigo-400" />
+                  <h2 className="text-xl font-bold aesthetic-gradient-text">Emotional Profile</h2>
                 </div>
                 <button 
                   onClick={() => setIsProfileOpen(false)}
-                  className="p-1 hover:bg-white/20 rounded-lg transition-colors"
+                  className="p-2 hover:bg-white/10 rounded-xl transition-colors text-slate-400"
                 >
                   <X size={20} />
                 </button>
@@ -1013,22 +1007,22 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
 
               <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto">
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-3">
-                    <Settings className="w-4 h-4 text-indigo-500" />
+                  <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2 mb-4 uppercase tracking-widest">
+                    <Settings className="w-4 h-4 text-indigo-400" />
                     Response Customization
                   </h3>
-                  <div className="space-y-4">
+                  <div className="space-y-6">
                     <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">Assistant Persona</label>
+                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-3 block">Assistant Persona</label>
                       <div className="grid grid-cols-2 gap-2">
                         {(['Empathetic', 'Professional', 'Brutally Honest', 'Zen'] as AssistantMode[]).map((mode) => (
                           <button
                             key={mode}
                             onClick={() => setAssistantMode(mode)}
-                            className={`px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
+                            className={`px-3 py-2.5 rounded-2xl text-[10px] font-bold uppercase tracking-wider transition-all border ${
                               assistantMode === mode
-                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
-                                : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                                ? 'bg-indigo-500 text-white border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.3)]'
+                                : 'bg-white/5 text-slate-400 border-white/10 hover:border-indigo-500/50'
                             }`}
                           >
                             {mode}
@@ -1037,16 +1031,16 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
                       </div>
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">Response Tone</label>
+                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-3 block">Response Tone</label>
                       <div className="grid grid-cols-2 gap-2">
                         {(['Balanced', 'Formal', 'Casual', 'Humorous'] as ResponseTone[]).map((tone) => (
                           <button
                             key={tone}
                             onClick={() => setResponseTone(tone)}
-                            className={`px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
+                            className={`px-3 py-2.5 rounded-2xl text-[10px] font-bold uppercase tracking-wider transition-all border ${
                               responseTone === tone
-                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
-                                : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                                ? 'bg-indigo-500 text-white border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.3)]'
+                                : 'bg-white/5 text-slate-400 border-white/10 hover:border-indigo-500/50'
                             }`}
                           >
                             {tone}
@@ -1055,16 +1049,16 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
                       </div>
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">Voice Personality</label>
+                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-3 block">Voice Personality</label>
                       <div className="grid grid-cols-2 gap-2">
                         {(['Soothing', 'Energetic', 'Calm', 'Professional'] as VoiceType[]).map((type) => (
                           <button
                             key={type}
                             onClick={() => setVoiceType(type)}
-                            className={`px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
+                            className={`px-3 py-2.5 rounded-2xl text-[10px] font-bold uppercase tracking-wider transition-all border ${
                               voiceType === type
-                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
-                                : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                                ? 'bg-indigo-500 text-white border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.3)]'
+                                : 'bg-white/5 text-slate-400 border-white/10 hover:border-indigo-500/50'
                             }`}
                           >
                             {type}
@@ -1075,51 +1069,51 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
                   </div>
                 </div>
 
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-3">
-                    <Sparkles className="w-4 h-4 text-indigo-500" />
-                    Learned Emotional Patterns
+                <div className="pt-6 border-t border-white/10">
+                  <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2 mb-4 uppercase tracking-widest">
+                    <Sparkles className="w-4 h-4 text-indigo-400" />
+                    Learned Essence
                   </h3>
                   {learnedInsights.length > 0 ? (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {learnedInsights.map((insight, i) => (
-                        <div key={i} className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-600 leading-relaxed">
+                        <div key={i} className="p-4 bg-white/5 rounded-2xl border border-white/10 text-[10px] text-slate-400 leading-relaxed font-medium">
                           {insight}
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-xs text-slate-400 italic p-4 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                      No patterns identified yet. Keep chatting to help the AI learn about you.
+                    <p className="text-[10px] text-slate-500 italic p-6 text-center bg-white/5 rounded-2xl border border-dashed border-white/10 font-medium">
+                      Essence not yet distilled. Continue our dialogue to deepen my understanding.
                     </p>
                   )}
                 </div>
 
-                <div className="pt-4 border-t border-slate-100">
-                  <div className="flex items-center justify-between mb-4">
+                <div className="pt-6 border-t border-white/10">
+                  <div className="flex items-center justify-between mb-6">
                     <div>
-                      <h4 className="text-sm font-medium text-slate-900">Session Statistics</h4>
-                      <p className="text-[10px] text-slate-500">Overview of your current data</p>
+                      <h4 className="text-xs font-bold text-slate-200 uppercase tracking-widest">Dialogue Statistics</h4>
+                      <p className="text-[9px] text-slate-500 uppercase tracking-tighter font-medium">Session Data Overview</p>
                     </div>
                     <div className="text-right">
-                      <div className="text-lg font-bold text-indigo-600">{messages.length}</div>
-                      <div className="text-[10px] text-slate-400 uppercase tracking-wider">Messages</div>
+                      <div className="text-2xl font-bold aesthetic-gradient-text">{messages.length}</div>
+                      <div className="text-[9px] text-slate-500 uppercase tracking-[0.2em] font-bold">Messages</div>
                     </div>
                   </div>
                   
                   <button
                     onClick={handleResetProfile}
-                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-red-50 text-red-600 text-sm font-semibold hover:bg-red-100 transition-colors border border-red-100"
+                    className="w-full flex items-center justify-center gap-2 py-4 px-4 rounded-2xl bg-red-500/10 text-red-400 text-[10px] font-bold uppercase tracking-widest hover:bg-red-500/20 transition-all border border-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.1)]"
                   >
                     <Trash2 size={16} />
-                    Reset Emotional Profile
+                    Reset Essence
                   </button>
                 </div>
               </div>
 
-              <div className="p-4 bg-slate-50 border-t border-slate-100 text-center">
-                <p className="text-[10px] text-slate-400">
-                  Your data is stored locally in your browser for privacy.
+              <div className="p-4 bg-white/5 border-t border-white/10 text-center">
+                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-[0.2em]">
+                  Essence stored locally • Privacy secured
                 </p>
               </div>
             </motion.div>
