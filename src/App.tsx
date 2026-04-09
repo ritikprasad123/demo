@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, Smile, Frown, Angry, Ghost, Meh, Zap, Loader2, MessageSquare, Info, HelpCircle, AlertCircle, Mic, MicOff, ThumbsUp, ThumbsDown, Settings, Volume2, VolumeX, Sparkles, Target, ShieldAlert, Wind, User, Trash2, X, Download, FileJson, FileText } from 'lucide-react';
-import { GoogleGenAI, Type } from "@google/genai";
+import { Send, Smile, Frown, Angry, Ghost, Meh, Zap, Loader2, MessageSquare, Info, HelpCircle, AlertCircle, Mic, MicOff, ThumbsUp, ThumbsDown, Settings, Volume2, VolumeX, Sparkles, Target, ShieldAlert, Wind, User, Trash2, X, Download, FileJson, FileText, Radio, Power } from 'lucide-react';
+import { GoogleGenAI, Type, Modality, LiveServerMessage } from "@google/genai";
 
 // Initialize Gemini API
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -14,6 +14,8 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 type Emotion = 'Happy' | 'Sad' | 'Angry' | 'Fearful' | 'Neutral' | 'Surprised' | 'Frustrated' | 'Inspired' | 'Exhausted' | 'Sarcastic' | 'Passive-Aggressive' | 'Mixed' | 'Excited' | 'Anxious' | 'Disappointed' | 'Confused';
 
 type AssistantMode = 'Empathetic' | 'Professional' | 'Brutally Honest' | 'Zen';
+type ResponseTone = 'Balanced' | 'Formal' | 'Casual' | 'Humorous';
+type VoiceType = 'Soothing' | 'Energetic' | 'Calm' | 'Professional';
 
 interface ChatMessage {
   id: string;
@@ -73,19 +75,34 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(false);
+  const [isHandsFree, setIsHandsFree] = useState(false);
   const [assistantMode, setAssistantMode] = useState<AssistantMode>('Empathetic');
+  const [responseTone, setResponseTone] = useState<ResponseTone>('Balanced');
+  const [voiceType, setVoiceType] = useState<VoiceType>('Soothing');
   const [learnedInsights, setLearnedInsights] = useState<string[]>([]);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [realtimeEmotion, setRealtimeEmotion] = useState<Emotion | null>(null);
   const [isAnalyzingRealtime, setIsAnalyzingRealtime] = useState(false);
+  const [isLiveMode, setIsLiveMode] = useState(false);
+  const [liveStatus, setLiveStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+  const liveSessionRef = useRef<any>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioWorkletNodeRef = useRef<AudioWorkletNode | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  const audioQueueRef = useRef<Int16Array[]>([]);
+  const isPlayingRef = useRef(false);
+  const nextStartTimeRef = useRef(0);
 
   // Load data from localStorage on mount
   useEffect(() => {
     const savedMessages = localStorage.getItem('sentiment_messages');
     const savedInsights = localStorage.getItem('sentiment_insights');
     const savedMode = localStorage.getItem('sentiment_mode');
+    const savedTone = localStorage.getItem('sentiment_tone');
+    const savedVoiceType = localStorage.getItem('sentiment_voice_type');
     const savedVoice = localStorage.getItem('sentiment_voice');
 
     if (savedMessages) {
@@ -103,6 +120,8 @@ export default function App() {
     }
     if (savedInsights) setLearnedInsights(JSON.parse(savedInsights));
     if (savedMode) setAssistantMode(savedMode as AssistantMode);
+    if (savedTone) setResponseTone(savedTone as ResponseTone);
+    if (savedVoiceType) setVoiceType(savedVoiceType as VoiceType);
     if (savedVoice) setIsVoiceEnabled(savedVoice === 'true');
   }, []);
 
@@ -120,6 +139,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('sentiment_mode', assistantMode);
   }, [assistantMode]);
+
+  useEffect(() => {
+    localStorage.setItem('sentiment_tone', responseTone);
+  }, [responseTone]);
+
+  useEffect(() => {
+    localStorage.setItem('sentiment_voice_type', voiceType);
+  }, [voiceType]);
 
   useEffect(() => {
     localStorage.setItem('sentiment_voice', isVoiceEnabled.toString());
@@ -169,6 +196,13 @@ export default function App() {
           .map((result: any) => result.transcript)
           .join('');
         setInput(transcript);
+
+        // If in hands-free mode and we have a final result, auto-send
+        if (isHandsFree && event.results[event.results.length - 1].isFinal) {
+          recognitionRef.current.stop();
+          // We need to use a timeout to ensure the state is updated or pass the transcript directly
+          setTimeout(() => handleSend(transcript), 500);
+        }
       };
 
       recognitionRef.current.onerror = (event: any) => {
@@ -209,14 +243,31 @@ export default function App() {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     
-    // Adjust voice based on mode
-    switch (assistantMode) {
-      case 'Zen':
+    // Select a female voice
+    const voices = window.speechSynthesis.getVoices();
+    const femaleVoice = voices.find(voice => 
+      voice.name.toLowerCase().includes('female') || 
+      voice.name.toLowerCase().includes('google uk english female') ||
+      voice.name.toLowerCase().includes('samantha') ||
+      voice.name.toLowerCase().includes('victoria')
+    );
+    
+    if (femaleVoice) {
+      utterance.voice = femaleVoice;
+    }
+
+    // Adjust voice based on selected personality
+    switch (voiceType) {
+      case 'Soothing':
         utterance.rate = 0.8;
         utterance.pitch = 0.9;
         break;
-      case 'Brutally Honest':
-        utterance.rate = 1.1;
+      case 'Energetic':
+        utterance.rate = 1.2;
+        utterance.pitch = 1.2;
+        break;
+      case 'Calm':
+        utterance.rate = 0.85;
         utterance.pitch = 1.0;
         break;
       case 'Professional':
@@ -228,6 +279,17 @@ export default function App() {
         utterance.pitch = 1.0;
     }
     
+    utterance.onend = () => {
+      if (isHandsFree && recognitionRef.current) {
+        try {
+          recognitionRef.current.start();
+          setIsListening(true);
+        } catch (e) {
+          // Recognition might already be started
+        }
+      }
+    };
+
     window.speechSynthesis.speak(utterance);
   };
 
@@ -243,19 +305,25 @@ export default function App() {
         model: "gemini-3-flash-preview",
         contents: `Current User Input: "${text}"\n\nConversation History:\n${historyContext}\n\n${insightsContext}`,
         config: {
-          systemInstruction: `You are a highly advanced Emotional Intelligence (EQ) AI that CONTINUOUSLY LEARNS from every interaction. You are currently operating in "${assistantMode}" mode.
+          systemInstruction: `You are a highly advanced Emotional Intelligence (EQ) AI that CONTINUOUSLY LEARNS from every interaction. 
+          You are currently operating in "${assistantMode}" mode with a "${responseTone}" tone.
 
 Your core directives:
 1. Deep Sentiment Analysis: Detect sarcasm, passive-aggression, hidden cries for help, or complex mixtures of emotions.
 2. Contextual Awareness: Use the conversation history and "Learned Insights" to understand the user's unique emotional profile.
 3. Nuanced Classification: Classify the primary emotion (Happy, Sad, Angry, Fearful, Neutral, Surprised, Inspired, Exhausted, Sarcastic, Passive-Aggressive, Mixed, Excited, Anxious, Disappointed, Confused).
 4. Mode-Specific Persona:
-   - Empathetic: Warm, supportive, uses "I" statements, focuses on validation.
+   - Empathetic: Warm, friendly, conversational, and easy to talk to. Focuses on validation and building a friendly rapport.
    - Professional: Objective, goal-oriented, encouraging but firm, focuses on growth.
    - Brutally Honest: Direct, no sugar-coating, focuses on logic and hard truths.
    - Zen: Calm, philosophical, focuses on mindfulness and the present moment.
-5. Continuous Training (SIMULATED): Identify one NEW specific insight about the user's emotional triggers.
-6. Follow-up Suggestions: Provide 2-3 short, actionable follow-up prompts or questions that guide the user towards deeper self-reflection or provide targeted support based on the current context.
+5. Tone Adaptation:
+   - Balanced: Standard natural conversational style.
+   - Formal: Use sophisticated vocabulary, proper grammar, and a respectful, polished structure. Avoid slang.
+   - Casual: Use relaxed language, contractions, and a friendly, approachable vibe.
+   - Humorous: Incorporate lighthearted wit, playful metaphors, or gentle humor where appropriate, without being insensitive.
+6. Continuous Training (SIMULATED): Identify one NEW specific insight about the user's emotional triggers.
+7. Follow-up Suggestions: Provide 2-3 short, actionable follow-up prompts or questions that guide the user towards deeper self-reflection or provide targeted support based on the current context.
 
 Output format (strict JSON):
 {
@@ -308,13 +376,14 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
     }
   };
 
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+  const handleSend = async (overrideInput?: string) => {
+    const textToSend = overrideInput || input;
+    if (!textToSend.trim() || isLoading) return;
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
-      content: input,
+      content: textToSend,
       timestamp: new Date(),
     };
 
@@ -323,7 +392,7 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
     setInput('');
     setIsLoading(true);
 
-    const analysis = await analyzeSentiment(input, messages, learnedInsights);
+    const analysis = await analyzeSentiment(textToSend, messages, learnedInsights);
 
     if (analysis.newInsight) {
       setLearnedInsights(prev => [...prev.slice(-4), analysis.newInsight]); // Keep last 5 insights
@@ -443,6 +512,160 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
     setInput(suggestion);
   };
 
+  // --- Gemini Live API Implementation ---
+
+  const stopLiveSession = useCallback(() => {
+    if (liveSessionRef.current) {
+      liveSessionRef.current.close();
+      liveSessionRef.current = null;
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach(track => track.stop());
+      audioStreamRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    setLiveStatus('disconnected');
+    setIsLiveMode(false);
+  }, []);
+
+  const startLiveSession = async () => {
+    try {
+      setLiveStatus('connecting');
+      setIsLiveMode(true);
+
+      // 1. Setup Audio Context
+      const audioContext = new AudioContext({ sampleRate: 16000 });
+      audioContextRef.current = audioContext;
+
+      // 2. Setup Microphone
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
+      const source = audioContext.createMediaStreamSource(stream);
+
+      // 3. Setup Processor (using ScriptProcessor for simplicity in this environment)
+      const processor = audioContext.createScriptProcessor(2048, 1, 1);
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+
+      // 4. Connect to Gemini Live
+      const sessionPromise = ai.live.connect({
+        model: "gemini-3.1-flash-live-preview",
+        callbacks: {
+          onopen: () => {
+            setLiveStatus('connected');
+            console.log('Gemini Live Connected');
+            
+            processor.onaudioprocess = (e) => {
+              if (liveStatus === 'connected' || true) { // Check ref or status
+                const inputData = e.inputBuffer.getChannelData(0);
+                // Convert Float32 to Int16
+                const pcmData = new Int16Array(inputData.length);
+                for (let i = 0; i < inputData.length; i++) {
+                  pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
+                }
+                // Convert to Base64
+                const base64Data = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)));
+                
+                sessionPromise.then(session => {
+                  session.sendRealtimeInput({
+                    audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+                  });
+                });
+              }
+            };
+          },
+          onmessage: async (message: LiveServerMessage) => {
+            // Handle Audio Output
+            const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
+            if (base64Audio) {
+              const binary = atob(base64Audio);
+              const bytes = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+              const pcmData = new Int16Array(bytes.buffer);
+              
+              // Play PCM data
+              playPCM(pcmData);
+            }
+
+            // Handle Transcription
+            const transcription = message.serverContent?.modelTurn?.parts[0]?.text;
+            if (transcription) {
+              setMessages(prev => {
+                const last = prev[prev.length - 1];
+                if (last && last.role === 'assistant' && !last.analysis) {
+                   return [...prev.slice(0, -1), { ...last, content: last.content + transcription }];
+                }
+                return [...prev, {
+                  id: Date.now().toString(),
+                  role: 'assistant',
+                  content: transcription,
+                  timestamp: new Date()
+                }];
+              });
+            }
+
+            // Handle Interruption
+            if (message.serverContent?.interrupted) {
+              audioQueueRef.current = [];
+              isPlayingRef.current = false;
+              // In a real app, we'd stop the current source node
+            }
+          },
+          onerror: (e) => {
+            console.error('Live API Error:', e);
+            stopLiveSession();
+          },
+          onclose: () => {
+            console.log('Live API Closed');
+            stopLiveSession();
+          }
+        },
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            // 'Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr'
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceType === 'Soothing' || voiceType === 'Calm' ? "Kore" : "Zephyr" } },
+          },
+          systemInstruction: `You are a friendly, empathetic female AI companion in a LIVE voice session. 
+          Your voice is ${voiceType.toLowerCase()}, clear, warm, and easy to understand.
+          You are currently using a "${responseTone}" tone.
+          Keep your responses concise and conversational. 
+          Focus on building a warm rapport and validating the user's feelings.
+          Since this is a voice session, avoid long lists or complex formatting.`,
+        },
+      });
+
+      liveSessionRef.current = await sessionPromise;
+
+    } catch (error) {
+      console.error('Failed to start live session:', error);
+      stopLiveSession();
+    }
+  };
+
+  const playPCM = (pcmData: Int16Array) => {
+    if (!audioContextRef.current) return;
+    
+    const floatData = new Float32Array(pcmData.length);
+    for (let i = 0; i < pcmData.length; i++) {
+      floatData[i] = pcmData[i] / 0x7FFF;
+    }
+
+    const buffer = audioContextRef.current.createBuffer(1, floatData.length, 16000);
+    buffer.getChannelData(0).set(floatData);
+
+    const source = audioContextRef.current.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioContextRef.current.destination);
+
+    const startTime = Math.max(audioContextRef.current.currentTime, nextStartTimeRef.current);
+    source.start(startTime);
+    nextStartTimeRef.current = startTime + buffer.duration;
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center p-4 md:p-8 font-sans">
       <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col h-[85vh] border border-slate-200">
@@ -462,6 +685,28 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <button 
+                onClick={() => isLiveMode ? stopLiveSession() : startLiveSession()}
+                className={`p-2 rounded-lg transition-all flex items-center gap-2 ${isLiveMode ? 'bg-red-100 text-red-600 ring-2 ring-red-400' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}
+                title={isLiveMode ? 'Stop Live Session' : 'Start Gemini Live Voice'}
+              >
+                <Radio size={18} className={isLiveMode ? 'animate-pulse' : ''} />
+                {isLiveMode && <span className="text-[10px] font-bold uppercase tracking-wider">{liveStatus}</span>}
+              </button>
+              <button 
+                onClick={() => {
+                  const newHandsFree = !isHandsFree;
+                  setIsHandsFree(newHandsFree);
+                  if (newHandsFree) {
+                    setIsVoiceEnabled(true);
+                    if (!isListening) toggleListening();
+                  }
+                }}
+                className={`p-2 rounded-lg transition-all ${isHandsFree ? 'bg-blue-100 text-blue-600 ring-2 ring-blue-400' : 'bg-slate-50 text-slate-400'}`}
+                title={isHandsFree ? 'Disable Alexa Mode' : 'Enable Alexa Mode (Hands-Free)'}
+              >
+                <Mic size={18} className={isHandsFree ? 'animate-pulse' : ''} />
+              </button>
               <div className="flex items-center bg-slate-50 rounded-lg p-1 border border-slate-100">
                 <button 
                   onClick={() => handleExportData('json')}
@@ -524,16 +769,53 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
         </header>
 
         {/* Chat Area */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
-          {messages.length === 0 && (
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50 relative">
+          {isLiveMode && (
+            <div className="absolute inset-0 z-20 bg-indigo-900/90 backdrop-blur-md flex flex-col items-center justify-center text-white p-8 text-center space-y-8">
+              <motion.div 
+                animate={{ 
+                  scale: [1, 1.1, 1],
+                  boxShadow: ["0 0 0px rgba(99, 102, 241, 0.4)", "0 0 40px rgba(99, 102, 241, 0.8)", "0 0 0px rgba(99, 102, 241, 0.4)"]
+                }}
+                transition={{ repeat: Infinity, duration: 2 }}
+                className="w-32 h-32 bg-indigo-500 rounded-full flex items-center justify-center border-4 border-indigo-400"
+              >
+                <Radio size={48} className="animate-pulse" />
+              </motion.div>
+              
+              <div className="space-y-2">
+                <h2 className="text-2xl font-bold">Gemini Live Active</h2>
+                <p className="text-indigo-200 text-sm max-w-xs">
+                  {liveStatus === 'connecting' ? 'Establishing secure voice link...' : 'I am listening. Speak naturally, and I will respond in real-time.'}
+                </p>
+              </div>
+
+              <div className="flex gap-4">
+                <div className="flex items-center gap-2 px-4 py-2 bg-white/10 rounded-full border border-white/20">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-ping" />
+                  <span className="text-xs font-medium">Real-time EQ Active</span>
+                </div>
+              </div>
+
+              <button 
+                onClick={stopLiveSession}
+                className="mt-8 flex items-center gap-2 px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold transition-all shadow-lg"
+              >
+                <Power size={18} />
+                End Session
+              </button>
+            </div>
+          )}
+
+          {messages.length === 0 && !isLiveMode && (
             <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-60">
               <div className="bg-white p-4 rounded-full shadow-sm">
                 <Smile className="w-12 h-12 text-indigo-400" />
               </div>
               <div className="max-w-xs">
-                <h2 className="text-lg font-medium text-slate-700">How are you feeling?</h2>
+                <h2 className="text-lg font-medium text-slate-700">Hey there! How are you doing?</h2>
                 <p className="text-sm text-slate-500 mt-2">
-                  Share your thoughts, and I'll try to understand your emotions and support you.
+                  I'm your friendly AI companion. Share your thoughts, and I'll be here to listen and support you!
                 </p>
               </div>
             </div>
@@ -730,6 +1012,69 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
               </div>
 
               <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-3">
+                    <Settings className="w-4 h-4 text-indigo-500" />
+                    Response Customization
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">Assistant Persona</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {(['Empathetic', 'Professional', 'Brutally Honest', 'Zen'] as AssistantMode[]).map((mode) => (
+                          <button
+                            key={mode}
+                            onClick={() => setAssistantMode(mode)}
+                            className={`px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
+                              assistantMode === mode
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                                : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                            }`}
+                          >
+                            {mode}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">Response Tone</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {(['Balanced', 'Formal', 'Casual', 'Humorous'] as ResponseTone[]).map((tone) => (
+                          <button
+                            key={tone}
+                            onClick={() => setResponseTone(tone)}
+                            className={`px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
+                              responseTone === tone
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                                : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                            }`}
+                          >
+                            {tone}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">Voice Personality</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {(['Soothing', 'Energetic', 'Calm', 'Professional'] as VoiceType[]).map((type) => (
+                          <button
+                            key={type}
+                            onClick={() => setVoiceType(type)}
+                            className={`px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
+                              voiceType === type
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                                : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                            }`}
+                          >
+                            {type}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div>
                   <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-3">
                     <Sparkles className="w-4 h-4 text-indigo-500" />
