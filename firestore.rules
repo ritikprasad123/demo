@@ -45,7 +45,9 @@ service cloud.firestore {
           && (data.get('isVoiceEnabled', true) is bool)
           && (data.get('instagramHandle', '') is string && data.get('instagramHandle', '').size() <= 100)
           && (data.get('facebookProfile', '') is string && data.get('facebookProfile', '').size() <= 200)
-          && (data.get('geminiInfo', '') is string && data.get('geminiInfo', '').size() <= 1000);
+          && (data.get('geminiInfo', '') is string && data.get('geminiInfo', '').size() <= 1000)
+          && (data.get('speechSensitivity', 0.5) is float || data.get('speechSensitivity', 0.5) is int)
+          && (data.get('language', 'en-US') is string && data.get('language', 'en-US').size() <= 10);
       }
 
       allow get: if isOwner(userId);

@@ -89,6 +89,7 @@ export default function App() {
   const [voiceRate, setVoiceRate] = useState(1.0);
   const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>('');
   const [liveVoiceName, setLiveVoiceName] = useState<string>('Puck');
+  const [speechSensitivity, setSpeechSensitivity] = useState(0.5);
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [learnedInsights, setLearnedInsights] = useState<string[]>([]);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -99,6 +100,7 @@ export default function App() {
   const [instagramHandle, setInstagramHandle] = useState('');
   const [facebookProfile, setFacebookProfile] = useState('');
   const [geminiInfo, setGeminiInfo] = useState('');
+  const [language, setLanguage] = useState('en-US');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -139,6 +141,8 @@ export default function App() {
           if (data.instagramHandle) setInstagramHandle(data.instagramHandle);
           if (data.facebookProfile) setFacebookProfile(data.facebookProfile);
           if (data.geminiInfo) setGeminiInfo(data.geminiInfo);
+          if (data.speechSensitivity !== undefined) setSpeechSensitivity(data.speechSensitivity);
+          if (data.language) setLanguage(data.language);
           
           // Greet the user if they just logged in
           if (messages.length === 0) {
@@ -212,6 +216,8 @@ export default function App() {
           instagramHandle,
           facebookProfile,
           geminiInfo,
+          speechSensitivity,
+          language,
           updatedAt: serverTimestamp()
         });
       } catch (e) {
@@ -219,7 +225,7 @@ export default function App() {
       }
     };
     syncSettings();
-  }, [assistantMode, responseTone, voiceType, voicePitch, voiceRate, selectedVoiceURI, liveVoiceName, isVoiceEnabled, instagramHandle, facebookProfile, geminiInfo]);
+  }, [assistantMode, responseTone, voiceType, voicePitch, voiceRate, selectedVoiceURI, liveVoiceName, isVoiceEnabled, instagramHandle, facebookProfile, geminiInfo, speechSensitivity, language]);
 
   const handleLogout = async () => {
     try {
@@ -378,6 +384,7 @@ export default function App() {
       recognitionRef.current = new SpeechRecognition();
       recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = true;
+      recognitionRef.current.lang = language;
 
       recognitionRef.current.onresult = (event: any) => {
         const transcript = Array.from(event.results)
@@ -407,7 +414,7 @@ export default function App() {
         setIsListening(false);
       };
     }
-  }, []);
+  }, [language]); // Re-initialize when language changes
 
   const toggleListening = () => {
     if (!recognitionRef.current) {
@@ -443,17 +450,26 @@ export default function App() {
     if (selectedVoice) {
       utterance.voice = selectedVoice;
     } else {
+      // Prioritize language match
+      const langMatch = voices.find(v => v.lang.startsWith(language.split('-')[0]));
+      
       // Fallback: Select a female voice as before
       const femaleVoice = voices.find(voice => 
-        voice.name.toLowerCase().includes('female') || 
-        voice.name.toLowerCase().includes('google uk english female') ||
-        voice.name.toLowerCase().includes('samantha') ||
-        voice.name.toLowerCase().includes('victoria')
+        (voice.lang.startsWith(language.split('-')[0]) || language === 'en-US') && (
+          voice.name.toLowerCase().includes('female') || 
+          voice.name.toLowerCase().includes('google uk english female') ||
+          voice.name.toLowerCase().includes('samantha') ||
+          voice.name.toLowerCase().includes('victoria')
+        )
       );
       if (femaleVoice) {
         utterance.voice = femaleVoice;
+      } else if (langMatch) {
+        utterance.voice = langMatch;
       }
     }
+
+    utterance.lang = language;
 
     // Apply pitch and rate from state
     let finalPitch = voicePitch;
@@ -506,10 +522,23 @@ export default function App() {
       
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: `User Context:\nBackground: ${geminiInfo || 'Unknown'}\nInstagram: ${instagramHandle || 'N/A'}\nFacebook: ${facebookProfile || 'N/A'}\n\nCurrent User Input: "${text}"\n\nConversation History:\n${historyContext}\n\n${insightsContext}`,
+        contents: `User Context:
+Language Preference: ${language}
+Background: ${geminiInfo || 'Unknown'}
+Instagram: ${instagramHandle || 'N/A'}
+Facebook: ${facebookProfile || 'N/A'}
+
+Current User Input: "${text}"
+
+Conversation History:
+${historyContext}
+
+${insightsContext}`,
         config: {
           systemInstruction: `You are a highly advanced Emotional Intelligence (EQ) AI that CONTINUOUSLY LEARNS from every interaction. 
           You are currently operating in "${assistantMode}" mode with a "${responseTone}" tone.
+          ALWAYS respond in the user's preferred language: ${language}.
+          Even if the user inputs another language, reply primarily in ${language} unless explicitly asked to switch.
 
 Your core directives:
 1. Deep Sentiment Analysis: Detect sarcasm, passive-aggression, hidden cries for help, or complex mixtures of emotions.
@@ -579,9 +608,9 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
     }
   };
 
-  const handleSend = async (overrideInput?: string) => {
-    const textToSend = overrideInput || input;
-    if (!textToSend.trim() || isLoading) return;
+  const handleSend = async (overrideInput?: any) => {
+    const textToSend = typeof overrideInput === 'string' ? overrideInput : input;
+    if (!textToSend || !textToSend.trim() || isLoading) return;
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -751,6 +780,8 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
 
   const startLiveSession = async () => {
     try {
+      if (audioContextRef.current) return; // Already running
+
       setLiveStatus('connecting');
       setIsLiveMode(true);
 
@@ -763,7 +794,7 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
       audioStreamRef.current = stream;
       const source = audioContext.createMediaStreamSource(stream);
 
-      // 3. Setup Processor (using ScriptProcessor for simplicity in this environment)
+      // 3. Setup Processor
       const processor = audioContext.createScriptProcessor(2048, 1, 1);
       source.connect(processor);
       processor.connect(audioContext.destination);
@@ -777,21 +808,36 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
             console.log('Gemini Live Connected');
             
             processor.onaudioprocess = (e) => {
-              if (liveStatus === 'connected' || true) { // Check ref or status
-                const inputData = e.inputBuffer.getChannelData(0);
+              const inputData = e.inputBuffer.getChannelData(0);
+              
+              // Apply sensitivity (simple noise gate)
+              // We'll use speechSensitivity to gate the audio
+              const threshold = (1.0 - speechSensitivity) * 0.05;
+              let hasSpeech = false;
+              for(let i=0; i<inputData.length; i++) {
+                if (Math.abs(inputData[i]) > threshold) {
+                  hasSpeech = true;
+                  break;
+                }
+              }
+
+              if (hasSpeech) {
                 // Convert Float32 to Int16
                 const pcmData = new Int16Array(inputData.length);
                 for (let i = 0; i < inputData.length; i++) {
                   pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
                 }
-                // Convert to Base64
-                const base64Data = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)));
+                
+                // Convert to Base64 using a safer method
+                const buffer = pcmData.buffer;
+                const binary = String.fromCharCode(...new Uint8Array(buffer));
+                const base64Data = btoa(binary);
                 
                 sessionPromise.then(session => {
                   session.sendRealtimeInput({
                     audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
                   });
-                });
+                }).catch(err => console.error("Session send error:", err));
               }
             };
           },
@@ -799,37 +845,41 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
             // Handle Audio Output
             const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
             if (base64Audio) {
-              const binary = atob(base64Audio);
-              const bytes = new Uint8Array(binary.length);
-              for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-              const pcmData = new Int16Array(bytes.buffer);
-              
-              // Play PCM data
-              playPCM(pcmData);
+              try {
+                const binary = atob(base64Audio);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                const pcmData = new Int16Array(bytes.buffer);
+                playPCM(pcmData);
+              } catch (e) {
+                console.error("Audio decode error:", e);
+              }
             }
 
-            // Handle Transcription
-            const transcription = message.serverContent?.modelTurn?.parts[0]?.text;
-            if (transcription) {
-              setMessages(prev => {
-                const last = prev[prev.length - 1];
-                if (last && last.role === 'assistant' && !last.analysis) {
-                   return [...prev.slice(0, -1), { ...last, content: last.content + transcription }];
-                }
-                return [...prev, {
-                  id: Date.now().toString(),
-                  role: 'assistant',
-                  content: transcription,
-                  timestamp: new Date()
-                }];
-              });
+            // Handle Text/Transcription
+            const parts = message.serverContent?.modelTurn?.parts;
+            if (parts) {
+              const text = parts.find(p => p.text)?.text;
+              if (text) {
+                setMessages(prev => {
+                  const last = prev[prev.length - 1];
+                  if (last && last.role === 'assistant' && !last.analysis) {
+                     return [...prev.slice(0, -1), { ...last, content: last.content + text }];
+                  }
+                  return [...prev, {
+                    id: 'live-' + Date.now(),
+                    role: 'assistant',
+                    content: text,
+                    timestamp: new Date()
+                  }];
+                });
+              }
             }
 
             // Handle Interruption
             if (message.serverContent?.interrupted) {
-              audioQueueRef.current = [];
-              isPlayingRef.current = false;
-              // In a real app, we'd stop the current source node
+              console.log("Interrupted");
+              nextStartTimeRef.current = audioContextRef.current?.currentTime || 0;
             }
           },
           onerror: (e) => {
@@ -844,18 +894,20 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
-            // 'Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr'
             voiceConfig: { prebuiltVoiceConfig: { voiceName: liveVoiceName } },
           },
           systemInstruction: `You are a friendly, empathetic female AI companion in a LIVE voice session. 
           You are operating in "${assistantMode}" mode with a "${responseTone}" tone.
-          Keep your responses concise and conversational. 
+          ALWAYS respond in the user's preferred language: ${language}.
+          Background about the user: ${geminiInfo || 'Unknown'}.
+          Keep your responses concise and conversational.
           Focus on building a warm rapport and validating the user's feelings.
           Since this is a voice session, avoid long lists or complex formatting.`,
         },
       });
 
-      liveSessionRef.current = await sessionPromise;
+      const session = await sessionPromise;
+      liveSessionRef.current = session;
 
     } catch (error) {
       console.error('Failed to start live session:', error);
@@ -1250,7 +1302,7 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
                 disabled={isLoading}
               />
               <button
-                onClick={handleSend}
+                onClick={() => handleSend()}
                 disabled={!input.trim() || isLoading}
                 className={`absolute right-3 p-2 rounded-xl transition-all ${
                   !input.trim() || isLoading
@@ -1400,38 +1452,57 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
                         </select>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <label className="text-[8px] font-bold text-slate-500 uppercase tracking-widest flex justify-between">
-                            <span>Pitch</span>
-                            <span className="text-indigo-400">{voicePitch.toFixed(1)}</span>
-                          </label>
-                          <input 
-                            type="range"
-                            min="0.5"
-                            max="2.0"
-                            step="0.1"
-                            value={voicePitch}
-                            onChange={(e) => setVoicePitch(parseFloat(e.target.value))}
-                            className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                          />
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <label className="text-[8px] font-bold text-slate-500 uppercase tracking-widest flex justify-between">
+                                <span>Pitch</span>
+                                <span className="text-indigo-400">{voicePitch.toFixed(1)}</span>
+                              </label>
+                              <input 
+                                type="range"
+                                min="0.5"
+                                max="2.0"
+                                step="0.1"
+                                value={voicePitch}
+                                onChange={(e) => setVoicePitch(parseFloat(e.target.value))}
+                                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-[8px] font-bold text-slate-500 uppercase tracking-widest flex justify-between">
+                                <span>Speed</span>
+                                <span className="text-indigo-400">{voiceRate.toFixed(1)}</span>
+                              </label>
+                              <input 
+                                type="range"
+                                min="0.5"
+                                max="2.0"
+                                step="0.1"
+                                value={voiceRate}
+                                onChange={(e) => setVoiceRate(parseFloat(e.target.value))}
+                                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[8px] font-bold text-slate-500 uppercase tracking-widest flex justify-between">
+                              <span>Mic Sensitivity</span>
+                              <span className="text-indigo-400">{Math.round(speechSensitivity * 100)}%</span>
+                            </label>
+                            <input 
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.05"
+                              value={speechSensitivity}
+                              onChange={(e) => setSpeechSensitivity(parseFloat(e.target.value))}
+                              className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                            />
+                            <p className="text-[7px] text-slate-600 uppercase font-bold tracking-tighter">Adjusts how readily voice is picked up. Higher = more sensitive.</p>
+                          </div>
                         </div>
-                        <div className="space-y-2">
-                          <label className="text-[8px] font-bold text-slate-500 uppercase tracking-widest flex justify-between">
-                            <span>Speed</span>
-                            <span className="text-indigo-400">{voiceRate.toFixed(1)}</span>
-                          </label>
-                          <input 
-                            type="range"
-                            min="0.5"
-                            max="2.0"
-                            step="0.1"
-                            value={voiceRate}
-                            onChange={(e) => setVoiceRate(parseFloat(e.target.value))}
-                            className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                          />
-                        </div>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -1442,6 +1513,24 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
                     Social Intelligence
                   </h3>
                   <div className="space-y-4">
+                    <div className="space-y-2">
+                       <label className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em] block">Interface Language</label>
+                       <select 
+                         value={language}
+                         onChange={(e) => setLanguage(e.target.value)}
+                         className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[10px] text-slate-300 outline-none focus:border-indigo-500/50 transition-all appearance-none"
+                       >
+                         <option value="en-US">English (US)</option>
+                         <option value="es-MX">Español (MX)</option>
+                         <option value="fr-FR">Français (FR)</option>
+                         <option value="de-DE">Deutsch (DE)</option>
+                         <option value="it-IT">Italiano (IT)</option>
+                         <option value="pt-BR">Português (BR)</option>
+                         <option value="hi-IN">Hindi (IN)</option>
+                         <option value="ja-JP">日本語 (JP)</option>
+                         <option value="zh-CN">简体中文 (CN)</option>
+                       </select>
+                    </div>
                     <div className="space-y-2">
                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em] block">Instagram Handle</label>
                        <input 

@@ -20,6 +20,8 @@
         "instagramHandle": { "type": "string" },
         "facebookProfile": { "type": "string" },
         "geminiInfo": { "type": "string" },
+        "speechSensitivity": { "type": "number" },
+        "language": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
