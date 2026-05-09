@@ -813,13 +813,13 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
       const veoAi = new GoogleGenAI({ apiKey: process.env.API_KEY || process.env.GEMINI_API_KEY });
       
       const promptMap: Record<string, string> = {
-        Happy: "An explosion of vibrant golden sparkles and butterflies in a sun-drenched meadow, cinematic lighting, 4k",
-        Sad: "A gentle rainfall against a misty window overlooking a quiet blue mountain lake at twilight, melancholic and peaceful",
-        Angry: "Molten lava flowing slowly through dark obsidian rocks, intense glowing orange light, cinematic macro shot",
-        Fearful: "Soft ethereal mist swirling through a moonlit deep forest with ancient trees, mysterious and moody",
+        Happy: "A cinematic abstract sequence of vibrant golden sparkles and dancing light beams, warm bokeh, ethereal and uplifting, 4k",
+        Sad: "A gentle rain falling on a quiet surface, rhythmic ripples, soft cool blue atmosphere, melancholic and meditative, cinematic slow motion",
+        Angry: "Abstract glowing molten lava flowing slowly in the dark, intense orange and deep red textures, heat distortion, powerful and cinematic",
+        Fearful: "Swirling dark mist and shadows with faint shards of silver light, abstract forest silhouettes, mysterious and moody",
         Neutral: "A minimalist zen garden with perfectly raked sand and a single smooth stone, soft morning light",
         Surprised: "A kaleidoscope of rapid color shifts and bursting prismatic lights, energetic and fleeting",
-        Frustrated: "A close-up of a static-filled screen slowly clearing to reveal a bright light, abstract representation of mental fog",
+        Frustrated: "Rough textures of jagged granite and sharp angles with flickering static energy, abstract frustration",
         Inspired: "A single ink drop unfolding into a complex vibrant nebula in deep space, majestic and growing",
         Exhausted: "A soft warm blanket of clouds moving slowly at sunrise, peaceful and restorative",
         Sarcastic: "A neon pink 'Fine' sign flickering in a dark retro room, stylized cinematic look",
@@ -1422,14 +1422,28 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
                           <span>{msg.analysis.emotion}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                           <button 
-                            onClick={() => generateEmotionalVideo(msg.analysis!.emotion)}
-                            className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-black/20 hover:bg-black/30 border border-black/10 text-[9px] font-bold uppercase tracking-wider transition-all hover:shadow-lg active:scale-95"
-                            title="Generate Cinematic Visual Memory"
-                           >
-                            <Clapperboard size={10} className="animate-pulse" />
-                            Visualize
-                           </button>
+                           {['Happy', 'Sad', 'Angry', 'Fearful', 'Inspired', 'Excited'].includes(msg.analysis!.emotion) ? (
+                             <motion.button 
+                              initial={{ scale: 0.95 }}
+                              animate={{ scale: [0.95, 1, 0.95] }}
+                              transition={{ repeat: Infinity, duration: 2 }}
+                              onClick={() => generateEmotionalVideo(msg.analysis!.emotion)}
+                              className="flex items-center gap-2 px-3 py-1 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-wider shadow-[0_0_15px_rgba(99,102,241,0.4)] transition-all hover:shadow-[0_0_20px_rgba(99,102,241,0.6)] active:scale-90"
+                              title="Generate Symbolic Visual Resonance"
+                             >
+                              <Sparkles size={12} className="text-white animate-pulse" />
+                              Visualize this feeling
+                             </motion.button>
+                           ) : (
+                             <button 
+                              onClick={() => generateEmotionalVideo(msg.analysis!.emotion)}
+                              className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-black/20 hover:bg-black/30 border border-black/10 text-[9px] font-bold uppercase tracking-wider transition-all hover:shadow-lg active:scale-95"
+                              title="Generate Cinematic Visual Memory"
+                             >
+                              <Clapperboard size={10} />
+                              Visualize
+                             </button>
+                           )}
                            <div className="text-[9px] opacity-70">
                             {Math.round(msg.analysis.confidence * 100)}%
                            </div>
