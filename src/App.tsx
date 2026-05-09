@@ -5,7 +5,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, Smile, Frown, Angry, Ghost, Meh, Zap, Loader2, MessageSquare, Info, HelpCircle, AlertCircle, Mic, MicOff, ThumbsUp, ThumbsDown, Settings, Volume2, VolumeX, Sparkles, Target, ShieldAlert, Wind, User, Trash2, X, Download, FileJson, FileText, Radio, Power, LogOut } from 'lucide-react';
+import { Send, Smile, Frown, Angry, Ghost, Meh, Zap, Loader2, MessageSquare, Info, HelpCircle, AlertCircle, Mic, MicOff, ThumbsUp, ThumbsDown, Settings, Volume2, VolumeX, Sparkles, Target, ShieldAlert, Wind, User, Trash2, X, Download, FileJson, FileText, Radio, Power, LogOut, Video, Clapperboard, Play, Maximize2 } from 'lucide-react';
 import { GoogleGenAI, Type, Modality, LiveServerMessage } from "@google/genai";
 import { auth, db, googleProvider, facebookProvider, handleFirestoreError, OperationType } from './lib/firebase';
 import { signInWithPopup, onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
@@ -101,6 +101,13 @@ export default function App() {
   const [facebookProfile, setFacebookProfile] = useState('');
   const [geminiInfo, setGeminiInfo] = useState('');
   const [language, setLanguage] = useState('en-US');
+  
+  // Veo State
+  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoLoadingStep, setVideoLoadingStep] = useState(0);
+  const [hasVeoKey, setHasVeoKey] = useState(false);
+  const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -273,6 +280,13 @@ export default function App() {
     };
     loadVoices();
     window.speechSynthesis.onvoiceschanged = loadVoices;
+
+    // Check for Veo API key selection
+    const checkVeoKey = async () => {
+      const hasKey = await (window as any).aistudio?.hasSelectedApiKey?.() || false;
+      setHasVeoKey(hasKey);
+    };
+    checkVeoKey();
 
     return () => {
       window.speechSynthesis.onvoiceschanged = null;
@@ -759,6 +773,111 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
     setInput(suggestion);
   };
 
+  // --- Veo Video Generation Implementation ---
+
+  const videoLoadingMessages = [
+    "Analyzing emotional depth...",
+    "Dreaming up a cinematic expression...",
+    "Capturing the essence of your mood...",
+    "Painting digital feelings...",
+    "Almost there! Just adding the final touches...",
+    "Synthesizing visual empathy..."
+  ];
+
+  const handleSelectVeoKey = async () => {
+    try {
+      await (window as any).aistudio?.openSelectKey?.();
+      setHasVeoKey(true);
+    } catch (error) {
+      console.error('Failed to open API key selection:', error);
+    }
+  };
+
+  const generateEmotionalVideo = async (emotion: Emotion) => {
+    if (!hasVeoKey) {
+      handleSelectVeoKey();
+      return;
+    }
+
+    setIsGeneratingVideo(true);
+    setVideoUrl(null);
+    setShowVideoPlayer(true);
+    setVideoLoadingStep(0);
+
+    const stepInterval = setInterval(() => {
+      setVideoLoadingStep(prev => (prev + 1) % videoLoadingMessages.length);
+    }, 15000);
+
+    try {
+      // Use a new instance as per guidelines for key selection
+      const veoAi = new GoogleGenAI({ apiKey: process.env.API_KEY || process.env.GEMINI_API_KEY });
+      
+      const promptMap: Record<string, string> = {
+        Happy: "An explosion of vibrant golden sparkles and butterflies in a sun-drenched meadow, cinematic lighting, 4k",
+        Sad: "A gentle rainfall against a misty window overlooking a quiet blue mountain lake at twilight, melancholic and peaceful",
+        Angry: "Molten lava flowing slowly through dark obsidian rocks, intense glowing orange light, cinematic macro shot",
+        Fearful: "Soft ethereal mist swirling through a moonlit deep forest with ancient trees, mysterious and moody",
+        Neutral: "A minimalist zen garden with perfectly raked sand and a single smooth stone, soft morning light",
+        Surprised: "A kaleidoscope of rapid color shifts and bursting prismatic lights, energetic and fleeting",
+        Frustrated: "A close-up of a static-filled screen slowly clearing to reveal a bright light, abstract representation of mental fog",
+        Inspired: "A single ink drop unfolding into a complex vibrant nebula in deep space, majestic and growing",
+        Exhausted: "A soft warm blanket of clouds moving slowly at sunrise, peaceful and restorative",
+        Sarcastic: "A neon pink 'Fine' sign flickering in a dark retro room, stylized cinematic look",
+        Excited: "Bright neon light trails weaving through a futuristic city at night, high speed and energy",
+        Mixed: "A fusion of fire and water dancing together in suspension, ethereal and complex"
+      };
+
+      const prompt = promptMap[emotion] || `An abstract cinematic visualization of ${emotion} emotion, 4k, professional photography`;
+
+      let operation = await veoAi.models.generateVideos({
+        model: 'veo-3.1-lite-generate-preview',
+        prompt: prompt,
+        config: {
+          numberOfVideos: 1,
+          resolution: '720p',
+          aspectRatio: '16:9'
+        }
+      });
+
+      // Poll for completion
+      while (!operation.done) {
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        operation = await veoAi.operations.getVideosOperation({ operation: operation });
+      }
+
+      const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+      
+      if (downloadLink && process.env.API_KEY) {
+        // According to guidelines, fetch with API key in header
+        const response = await fetch(downloadLink, {
+          method: 'GET',
+          headers: {
+            'x-goog-api-key': process.env.API_KEY,
+          },
+        });
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        setVideoUrl(url);
+      } else if (downloadLink) {
+        // Fallback if env variable isn't quite right but we have the link
+        setVideoUrl(downloadLink);
+      }
+
+    } catch (error: any) {
+      console.error('Video generation failed:', error);
+      if (error.message?.includes('Requested entity was not found')) {
+        setHasVeoKey(false);
+        alert("API Key session expired. Please select your key again.");
+      } else {
+        alert("Something went wrong while generating your video message.");
+      }
+      setShowVideoPlayer(false);
+    } finally {
+      clearInterval(stepInterval);
+      setIsGeneratingVideo(false);
+    }
+  };
+
   // --- Gemini Live API Implementation ---
 
   const stopLiveSession = useCallback(() => {
@@ -1112,7 +1231,100 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
 
         {/* Chat Area */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-transparent relative">
-          {isLiveMode && (
+          {/* Veo Video Overlay */}
+          <AnimatePresence>
+            {showVideoPlayer && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 z-50 bg-slate-950/90 backdrop-blur-3xl flex flex-col items-center justify-center p-6 text-center"
+              >
+                <div className="w-full max-w-4xl relative group">
+                  <motion.button
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    onClick={() => setShowVideoPlayer(false)}
+                    className="absolute -top-12 right-0 p-2 text-white/50 hover:text-white transition-colors"
+                  >
+                    <X size={24} />
+                  </motion.button>
+
+                  <div className="aspect-video w-full rounded-2xl overflow-hidden bg-black/40 border border-white/10 shadow-2xl relative">
+                    {isGeneratingVideo ? (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center space-y-8 p-12">
+                         <div className="relative">
+                            <motion.div 
+                              animate={{ 
+                                scale: [1, 1.2, 1],
+                                opacity: [0.3, 0.6, 0.3]
+                              }}
+                              transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+                              className="absolute inset-0 bg-indigo-500 rounded-full blur-3xl opacity-20"
+                            />
+                            <Clapperboard size={64} className="text-white/20 animate-bounce" />
+                         </div>
+                         <div className="space-y-4 max-w-md">
+                           <h3 className="text-xl font-bold aesthetic-gradient-text uppercase tracking-[0.2em]">Gemini Veo</h3>
+                           <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                              <motion.div 
+                                animate={{ x: ["-100%", "100%"] }}
+                                transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+                                className="h-full w-1/3 bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.8)]"
+                              />
+                           </div>
+                           <p className="text-indigo-200/60 text-sm italic font-serif h-12 flex items-center justify-center px-4">
+                             {videoLoadingMessages[videoLoadingStep]}
+                           </p>
+                         </div>
+                      </div>
+                    ) : videoUrl ? (
+                      <motion.video
+                        initial={{ opacity: 0, scale: 1.05 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="w-full h-full object-cover"
+                        src={videoUrl}
+                        controls
+                        autoPlay
+                        loop
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : null}
+
+                    {videoUrl && (
+                       <div className="absolute top-4 left-4 flex gap-2">
+                          <div className="px-2 py-1 bg-black/40 backdrop-blur-md rounded-lg border border-white/10 flex items-center gap-2">
+                             <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse shadow-[0_0_5px_rgba(99,102,241,1)]" />
+                             <span className="text-[8px] font-bold text-white uppercase tracking-widest">Cinematic EQ Visual</span>
+                          </div>
+                       </div>
+                    )}
+                  </div>
+                  
+                  {videoUrl && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-6 space-y-4"
+                    >
+                      <p className="text-slate-400 text-sm max-w-2xl mx-auto italic">
+                        "This visualization was generated based on the emotional signature of your input. May it bring a moment of resonance to your day."
+                      </p>
+                      <button 
+                        onClick={() => setShowVideoPlayer(false)}
+                        className="px-8 py-3 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-2xl font-bold transition-all uppercase tracking-widest text-[10px]"
+                      >
+                        Return to Conversation
+                      </button>
+                    </motion.div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {isLiveMode && (
             <div className="absolute inset-0 z-20 bg-slate-950/80 backdrop-blur-2xl flex flex-col items-center justify-center text-white p-8 text-center space-y-8">
               <motion.div 
                 animate={{ 
@@ -1148,6 +1360,7 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
               </button>
             </div>
           )}
+        </AnimatePresence>
 
           {messages.length === 0 && !isLiveMode && (
             <div className="h-full flex flex-col items-center justify-center text-center space-y-6 opacity-40">
@@ -1204,12 +1417,22 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
                       className={`p-3 rounded-xl border text-xs flex flex-col gap-2 ${EMOTION_COLORS[msg.analysis.emotion] || EMOTION_COLORS.Neutral}`}
                     >
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 font-semibold">
+                        <div className="flex items-center gap-2 font-semibold text-xs transition-all hover:scale-105 cursor-default">
                           {EMOTION_ICONS[msg.analysis.emotion] || <Meh size={14} />}
                           <span>{msg.analysis.emotion}</span>
                         </div>
-                        <div className="text-[10px] opacity-70">
-                          {Math.round(msg.analysis.confidence * 100)}% Confidence
+                        <div className="flex items-center gap-2">
+                           <button 
+                            onClick={() => generateEmotionalVideo(msg.analysis!.emotion)}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-black/20 hover:bg-black/30 border border-black/10 text-[9px] font-bold uppercase tracking-wider transition-all hover:shadow-lg active:scale-95"
+                            title="Generate Cinematic Visual Memory"
+                           >
+                            <Clapperboard size={10} className="animate-pulse" />
+                            Visualize
+                           </button>
+                           <div className="text-[9px] opacity-70">
+                            {Math.round(msg.analysis.confidence * 100)}%
+                           </div>
                         </div>
                       </div>
                       <p className="opacity-90 italic">"{msg.analysis.reason}"</p>
