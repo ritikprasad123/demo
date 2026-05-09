@@ -5,8 +5,11 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, Smile, Frown, Angry, Ghost, Meh, Zap, Loader2, MessageSquare, Info, HelpCircle, AlertCircle, Mic, MicOff, ThumbsUp, ThumbsDown, Settings, Volume2, VolumeX, Sparkles, Target, ShieldAlert, Wind, User, Trash2, X, Download, FileJson, FileText, Radio, Power } from 'lucide-react';
+import { Send, Smile, Frown, Angry, Ghost, Meh, Zap, Loader2, MessageSquare, Info, HelpCircle, AlertCircle, Mic, MicOff, ThumbsUp, ThumbsDown, Settings, Volume2, VolumeX, Sparkles, Target, ShieldAlert, Wind, User, Trash2, X, Download, FileJson, FileText, Radio, Power, LogOut } from 'lucide-react';
 import { GoogleGenAI, Type, Modality, LiveServerMessage } from "@google/genai";
+import { auth, db, googleProvider, facebookProvider, handleFirestoreError, OperationType } from './lib/firebase';
+import { signInWithPopup, onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
+import { doc, getDoc, setDoc, collection, query, orderBy, onSnapshot, addDoc, deleteDoc, getDocs, updateDoc, getDocFromServer, serverTimestamp } from 'firebase/firestore';
 
 // Initialize Gemini API
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -70,21 +73,32 @@ const EMOTION_COLORS: Record<string, string> = {
 };
 
 export default function App() {
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(false);
   const [isHandsFree, setIsHandsFree] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [assistantMode, setAssistantMode] = useState<AssistantMode>('Empathetic');
   const [responseTone, setResponseTone] = useState<ResponseTone>('Balanced');
   const [voiceType, setVoiceType] = useState<VoiceType>('Soothing');
+  const [voicePitch, setVoicePitch] = useState(1.0);
+  const [voiceRate, setVoiceRate] = useState(1.0);
+  const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>('');
+  const [liveVoiceName, setLiveVoiceName] = useState<string>('Puck');
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [learnedInsights, setLearnedInsights] = useState<string[]>([]);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [realtimeEmotion, setRealtimeEmotion] = useState<Emotion | null>(null);
   const [isAnalyzingRealtime, setIsAnalyzingRealtime] = useState(false);
   const [isLiveMode, setIsLiveMode] = useState(false);
   const [liveStatus, setLiveStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+  const [instagramHandle, setInstagramHandle] = useState('');
+  const [facebookProfile, setFacebookProfile] = useState('');
+  const [geminiInfo, setGeminiInfo] = useState('');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -96,41 +110,181 @@ export default function App() {
   const isPlayingRef = useRef(false);
   const nextStartTimeRef = useRef(0);
 
-  // Load data from localStorage on mount
+  // Auth listener
   useEffect(() => {
-    const savedMessages = localStorage.getItem('sentiment_messages');
-    const savedInsights = localStorage.getItem('sentiment_insights');
-    const savedMode = localStorage.getItem('sentiment_mode');
-    const savedTone = localStorage.getItem('sentiment_tone');
-    const savedVoiceType = localStorage.getItem('sentiment_voice_type');
-    const savedVoice = localStorage.getItem('sentiment_voice');
-
-    if (savedMessages) {
-      try {
-        const parsed = JSON.parse(savedMessages);
-        // Convert string timestamps back to Date objects
-        const formatted = parsed.map((m: any) => ({
-          ...m,
-          timestamp: new Date(m.timestamp)
-        }));
-        setMessages(formatted);
-      } catch (e) {
-        console.error('Failed to parse saved messages', e);
-      }
-    }
-    if (savedInsights) setLearnedInsights(JSON.parse(savedInsights));
-    if (savedMode) setAssistantMode(savedMode as AssistantMode);
-    if (savedTone) setResponseTone(savedTone as ResponseTone);
-    if (savedVoiceType) setVoiceType(savedVoiceType as VoiceType);
-    if (savedVoice) setIsVoiceEnabled(savedVoice === 'true');
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
   }, []);
 
-  // Save data to localStorage when it changes
+  // Load user data from Firestore
   useEffect(() => {
-    if (messages.length > 0) {
-      localStorage.setItem('sentiment_messages', JSON.stringify(messages));
+    if (!user) return;
+
+    const loadUserData = async () => {
+      try {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          if (data.assistantMode) setAssistantMode(data.assistantMode);
+          if (data.responseTone) setResponseTone(data.responseTone);
+          if (data.voiceType) setVoiceType(data.voiceType);
+          if (data.voicePitch !== undefined) setVoicePitch(data.voicePitch);
+          if (data.voiceRate !== undefined) setVoiceRate(data.voiceRate);
+          if (data.selectedVoiceURI) setSelectedVoiceURI(data.selectedVoiceURI);
+          if (data.liveVoiceName) setLiveVoiceName(data.liveVoiceName);
+          if (data.isVoiceEnabled !== undefined) setIsVoiceEnabled(data.isVoiceEnabled);
+          if (data.instagramHandle) setInstagramHandle(data.instagramHandle);
+          if (data.facebookProfile) setFacebookProfile(data.facebookProfile);
+          if (data.geminiInfo) setGeminiInfo(data.geminiInfo);
+          
+          // Greet the user if they just logged in
+          if (messages.length === 0) {
+            const greeting = `Welcome back, ${user.displayName || 'friend'}. I'm here to listen. How are you feeling today?`;
+            speak(greeting);
+          }
+        } else {
+          // Initialize user doc
+          try {
+            await setDoc(doc(db, 'users', user.uid), {
+              uid: user.uid,
+              email: user.email,
+              displayName: user.displayName,
+              photoURL: user.photoURL,
+              createdAt: serverTimestamp(),
+              assistantMode,
+              responseTone,
+              voiceType,
+              voicePitch,
+              voiceRate,
+              isVoiceEnabled,
+              liveVoiceName,
+              instagramHandle,
+              facebookProfile,
+              geminiInfo
+            });
+          } catch (error) {
+            handleFirestoreError(error, OperationType.CREATE, `users/${user.uid}`);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading user data:', error);
+      }
+    };
+
+    const unsubscribeMessages = onSnapshot(
+      query(collection(db, 'users', user.uid, 'messages'), orderBy('timestamp', 'asc')),
+      (snapshot) => {
+        const msgs = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            ...data,
+            id: doc.id,
+            timestamp: new Date(data.timestamp)
+          } as ChatMessage;
+        });
+        setMessages(msgs);
+      }
+    );
+
+    loadUserData();
+    return () => {
+      unsubscribeMessages();
+    };
+  }, [user]);
+
+  // Sync settings to Firestore
+  useEffect(() => {
+    if (!user) return;
+    const syncSettings = async () => {
+      try {
+        await updateDoc(doc(db, 'users', user.uid), {
+          assistantMode,
+          responseTone,
+          voiceType,
+          voicePitch,
+          voiceRate,
+          selectedVoiceURI,
+          liveVoiceName,
+          isVoiceEnabled,
+          instagramHandle,
+          facebookProfile,
+          geminiInfo,
+          updatedAt: serverTimestamp()
+        });
+      } catch (e) {
+        handleFirestoreError(e, OperationType.UPDATE, `users/${user.uid}`);
+      }
+    };
+    syncSettings();
+  }, [assistantMode, responseTone, voiceType, voicePitch, voiceRate, selectedVoiceURI, liveVoiceName, isVoiceEnabled, instagramHandle, facebookProfile, geminiInfo]);
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setMessages([]);
+      setLearnedInsights([]);
+    } catch (error) {
+      console.error('Logout failed:', error);
     }
-  }, [messages]);
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error('Google login failed:', error);
+    }
+  };
+
+  const handleFacebookLogin = async () => {
+    try {
+      await signInWithPopup(auth, facebookProvider);
+    } catch (error) {
+      console.error('Facebook login failed:', error);
+    }
+  };
+
+  useEffect(() => {
+    // Validate connection to Firestore
+    const testConnection = async () => {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if(error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration.");
+        }
+      }
+    };
+    testConnection();
+
+    // Initial voice load
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      setAvailableVoices(voices);
+    };
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
+  }, []);
+
+  // Save messages to Firestore
+  const saveMessageToFirestore = async (msg: ChatMessage) => {
+    if (!user) return;
+    try {
+      await addDoc(collection(db, 'users', user.uid, 'messages'), {
+        ...msg,
+        timestamp: msg.timestamp.getTime()
+      });
+    } catch (e) {
+      console.error('Error saving message:', e);
+    }
+  };
 
   useEffect(() => {
     localStorage.setItem('sentiment_insights', JSON.stringify(learnedInsights));
@@ -146,7 +300,42 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem('sentiment_voice_type', voiceType);
+    // When predefined voice type changes, update the sliders
+    switch (voiceType) {
+      case 'Soothing':
+        setVoicePitch(0.9);
+        setVoiceRate(0.8);
+        break;
+      case 'Energetic':
+        setVoicePitch(1.2);
+        setVoiceRate(1.2);
+        break;
+      case 'Calm':
+        setVoicePitch(1.0);
+        setVoiceRate(0.85);
+        break;
+      case 'Professional':
+        setVoicePitch(1.1);
+        setVoiceRate(1.0);
+        break;
+    }
   }, [voiceType]);
+
+  useEffect(() => {
+    localStorage.setItem('sentiment_pitch', voicePitch.toString());
+  }, [voicePitch]);
+
+  useEffect(() => {
+    localStorage.setItem('sentiment_rate', voiceRate.toString());
+  }, [voiceRate]);
+
+  useEffect(() => {
+    localStorage.setItem('sentiment_voice_uri', selectedVoiceURI);
+  }, [selectedVoiceURI]);
+
+  useEffect(() => {
+    localStorage.setItem('sentiment_live_voice', liveVoiceName);
+  }, [liveVoiceName]);
 
   useEffect(() => {
     localStorage.setItem('sentiment_voice', isVoiceEnabled.toString());
@@ -206,7 +395,11 @@ export default function App() {
       };
 
       recognitionRef.current.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error);
+        if (event.error === 'no-speech') {
+          console.warn('Speech recognition: No speech detected.');
+        } else {
+          console.error('Speech recognition error:', event.error);
+        }
         setIsListening(false);
       };
 
@@ -243,43 +436,53 @@ export default function App() {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     
-    // Select a female voice
+    // Select specific voice if configured
     const voices = window.speechSynthesis.getVoices();
-    const femaleVoice = voices.find(voice => 
-      voice.name.toLowerCase().includes('female') || 
-      voice.name.toLowerCase().includes('google uk english female') ||
-      voice.name.toLowerCase().includes('samantha') ||
-      voice.name.toLowerCase().includes('victoria')
-    );
+    const selectedVoice = voices.find(v => v.voiceURI === selectedVoiceURI);
     
-    if (femaleVoice) {
-      utterance.voice = femaleVoice;
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+    } else {
+      // Fallback: Select a female voice as before
+      const femaleVoice = voices.find(voice => 
+        voice.name.toLowerCase().includes('female') || 
+        voice.name.toLowerCase().includes('google uk english female') ||
+        voice.name.toLowerCase().includes('samantha') ||
+        voice.name.toLowerCase().includes('victoria')
+      );
+      if (femaleVoice) {
+        utterance.voice = femaleVoice;
+      }
     }
 
-    // Adjust voice based on selected personality
-    switch (voiceType) {
-      case 'Soothing':
-        utterance.rate = 0.8;
-        utterance.pitch = 0.9;
-        break;
-      case 'Energetic':
-        utterance.rate = 1.2;
-        utterance.pitch = 1.2;
-        break;
-      case 'Calm':
-        utterance.rate = 0.85;
-        utterance.pitch = 1.0;
-        break;
-      case 'Professional':
-        utterance.rate = 1.0;
-        utterance.pitch = 1.1;
-        break;
-      default:
-        utterance.rate = 0.95;
-        utterance.pitch = 1.0;
+    // Apply pitch and rate from state
+    let finalPitch = voicePitch;
+    let finalRate = voiceRate;
+
+    // Adjust based on emotion if available
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage?.role === 'assistant' && lastMessage.analysis?.emotion) {
+      const emo = lastMessage.analysis.emotion;
+      if (emo === 'Sad' || emo === 'Exhausted' || emo === 'Disappointed') {
+        finalPitch *= 0.85;
+        finalRate *= 0.9;
+      } else if (emo === 'Angry' || emo === 'Excited' || emo === 'Fearful') {
+        finalPitch *= 1.15;
+        finalRate *= 1.1;
+      } else if (emo === 'Inspired' || emo === 'Happy') {
+        finalPitch *= 1.05;
+        finalRate *= 1.05;
+      } else if (emo === 'Zen' || emo === 'Calm') {
+        finalRate *= 0.85;
+      }
     }
+
+    utterance.pitch = finalPitch;
+    utterance.rate = finalRate;
     
+    setIsSpeaking(true);
     utterance.onend = () => {
+      setIsSpeaking(false);
       if (isHandsFree && recognitionRef.current) {
         try {
           recognitionRef.current.start();
@@ -303,7 +506,7 @@ export default function App() {
       
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: `Current User Input: "${text}"\n\nConversation History:\n${historyContext}\n\n${insightsContext}`,
+        contents: `User Context:\nBackground: ${geminiInfo || 'Unknown'}\nInstagram: ${instagramHandle || 'N/A'}\nFacebook: ${facebookProfile || 'N/A'}\n\nCurrent User Input: "${text}"\n\nConversation History:\n${historyContext}\n\n${insightsContext}`,
         config: {
           systemInstruction: `You are a highly advanced Emotional Intelligence (EQ) AI that CONTINUOUSLY LEARNS from every interaction. 
           You are currently operating in "${assistantMode}" mode with a "${responseTone}" tone.
@@ -387,10 +590,11 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
       timestamp: new Date(),
     };
 
-    const updatedMessages = [...messages, userMessage];
-    setMessages(updatedMessages);
     setInput('');
     setIsLoading(true);
+    
+    // Save user message to Firestore
+    await saveMessageToFirestore(userMessage);
 
     const analysis = await analyzeSentiment(textToSend, messages, learnedInsights);
 
@@ -411,17 +615,31 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, assistantMessage]);
+    // Save assistant message to Firestore
+    await saveMessageToFirestore(assistantMessage);
+    
     setIsLoading(false);
     speak(assistantMessage.content);
   };
 
-  const handleResetProfile = () => {
+  const handleResetProfile = async () => {
     if (confirm('Are you sure you want to reset your emotional profile? This will clear all chat history and learned insights.')) {
+      if (user) {
+        try {
+          const messagesSnap = await getDocs(collection(db, 'users', user.uid, 'messages'));
+          const deletePromises = messagesSnap.docs.map(doc => deleteDoc(doc.ref));
+          await Promise.all(deletePromises);
+          
+          await updateDoc(doc(db, 'users', user.uid), {
+            learnedInsights: [],
+            updatedAt: new Date()
+          });
+        } catch (e) {
+          console.error('Reset failed:', e);
+        }
+      }
       setMessages([]);
       setLearnedInsights([]);
-      localStorage.removeItem('sentiment_messages');
-      localStorage.removeItem('sentiment_insights');
       setIsProfileOpen(false);
     }
   };
@@ -627,11 +845,10 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
           responseModalities: [Modality.AUDIO],
           speechConfig: {
             // 'Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr'
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceType === 'Soothing' || voiceType === 'Calm' ? "Kore" : "Zephyr" } },
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: liveVoiceName } },
           },
           systemInstruction: `You are a friendly, empathetic female AI companion in a LIVE voice session. 
-          Your voice is ${voiceType.toLowerCase()}, clear, warm, and easy to understand.
-          You are currently using a "${responseTone}" tone.
+          You are operating in "${assistantMode}" mode with a "${responseTone}" tone.
           Keep your responses concise and conversational. 
           Focus on building a warm rapport and validating the user's feelings.
           Since this is a voice session, avoid long lists or complex formatting.`,
@@ -668,82 +885,159 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
 
   return (
     <div className="min-h-screen flex flex-col items-center p-4 md:p-8 font-sans">
-      <div className="w-full max-w-2xl glass-card rounded-3xl overflow-hidden flex flex-col h-[85vh]">
-        {/* Header */}
-        <header className="bg-white/5 border-b border-white/10 p-6 flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="bg-indigo-500/20 p-2 rounded-xl border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.3)]">
-                <MessageSquare className="text-indigo-400 w-6 h-6" />
+      {authLoading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
+        </div>
+      ) : !user ? (
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-md glass-card rounded-3xl p-8 space-y-8 text-center my-auto"
+        >
+          <div className="bg-indigo-500/20 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto border border-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.2)]">
+            <MessageSquare className="text-indigo-400 w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-3xl font-bold aesthetic-gradient-text tracking-tight">Emotional Intelligence</h1>
+            <p className="text-slate-400 text-sm">Sign in to sync your emotional profile across devices.</p>
+          </div>
+          <div className="space-y-3">
+            <button 
+              onClick={handleGoogleLogin}
+              className="w-full py-4 px-6 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center gap-3 hover:bg-white/10 transition-all font-bold text-slate-200 group"
+            >
+              <img src="https://www.google.com/favicon.ico" className="w-5 h-5 grayscale group-hover:grayscale-0 transition-all" alt="Google" referrerPolicy="no-referrer" />
+              Continue with Google
+            </button>
+            <button 
+              onClick={handleFacebookLogin}
+              className="w-full py-4 px-6 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center gap-3 hover:bg-white/10 transition-all font-bold text-slate-200 group"
+            >
+              <img src="https://www.facebook.com/favicon.ico" className="w-5 h-5 grayscale group-hover:grayscale-0 transition-all" alt="Facebook" referrerPolicy="no-referrer" />
+              Continue with Facebook
+            </button>
+          </div>
+          <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Privacy First • Secure Authentication</p>
+        </motion.div>
+      ) : (
+        <>
+          <div className="w-full max-w-2xl glass-card rounded-3xl overflow-hidden flex flex-col h-[85vh]">
+          {/* Header */}
+          <header className="bg-white/5 border-b border-white/10 p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-indigo-500/20 p-2 rounded-xl border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.3)]">
+                  <MessageSquare className="text-indigo-400 w-6 h-6" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold aesthetic-gradient-text tracking-tight">Sentiment AI v4.0</h1>
+                  <p className="text-[10px] text-slate-400 flex items-center gap-1.5 font-medium uppercase tracking-widest">
+                    <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.5)]"></span>
+                    EQ Intelligence
+                  </p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-xl font-bold aesthetic-gradient-text tracking-tight">Sentiment AI v4.0</h1>
-                <p className="text-[10px] text-slate-400 flex items-center gap-1.5 font-medium uppercase tracking-widest">
-                  <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.5)]"></span>
-                  EQ Intelligence
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => isLiveMode ? stopLiveSession() : startLiveSession()}
-                className={`p-2 rounded-xl transition-all flex items-center gap-2 ${isLiveMode ? 'bg-red-500/20 text-red-400 ring-1 ring-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]' : 'bg-white/5 text-slate-400 hover:bg-white/10 border border-white/10'}`}
-                title={isLiveMode ? 'Stop Live Session' : 'Start Gemini Live Voice'}
-              >
-                <Radio size={18} className={isLiveMode ? 'animate-pulse' : ''} />
-                {isLiveMode && <span className="text-[9px] font-bold uppercase tracking-wider">{liveStatus}</span>}
-              </button>
-              <button 
-                onClick={() => {
-                  const newHandsFree = !isHandsFree;
-                  setIsHandsFree(newHandsFree);
-                  if (newHandsFree) {
-                    setIsVoiceEnabled(true);
-                    if (!isListening) toggleListening();
-                  }
-                }}
-                className={`p-2 rounded-xl transition-all ${isHandsFree ? 'bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-white/5 text-slate-400 hover:bg-white/10 border border-white/10'}`}
-                title={isHandsFree ? 'Disable Alexa Mode' : 'Enable Alexa Mode (Hands-Free)'}
-              >
-                <Mic size={18} className={isHandsFree ? 'animate-pulse' : ''} />
-              </button>
-              <div className="flex items-center bg-white/5 rounded-xl p-0.5 border border-white/10">
+              <div className="flex items-center gap-2">
                 <button 
-                  onClick={() => handleExportData('json')}
-                  className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-white/5 rounded-lg transition-all"
-                  title="Export as JSON"
+                  onClick={() => isLiveMode ? stopLiveSession() : startLiveSession()}
+                  className={`p-2 rounded-xl transition-all flex items-center gap-2 ${isLiveMode ? 'bg-red-500/20 text-red-400 ring-1 ring-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]' : 'bg-white/5 text-slate-400 hover:bg-white/10 border border-white/10'}`}
+                  title={isLiveMode ? 'Stop Live Session' : 'Start Gemini Live Voice'}
                 >
-                  <FileJson size={16} />
+                  <Radio size={18} className={isLiveMode ? 'animate-pulse' : ''} />
+                  {isLiveMode && <span className="text-[9px] font-bold uppercase tracking-wider">{liveStatus}</span>}
                 </button>
                 <button 
-                  onClick={() => handleExportData('text')}
-                  className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-white/5 rounded-lg transition-all"
-                  title="Export as Text"
+                  onClick={() => {
+                    const newHandsFree = !isHandsFree;
+                    setIsHandsFree(newHandsFree);
+                    if (newHandsFree) {
+                      setIsVoiceEnabled(true);
+                      if (!isListening) toggleListening();
+                    }
+                  }}
+                  className={`p-2 rounded-xl transition-all ${isHandsFree ? 'bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-white/5 text-slate-400 hover:bg-white/10 border border-white/10'}`}
+                  title={isHandsFree ? 'Disable Alexa Mode' : 'Enable Alexa Mode (Hands-Free)'}
                 >
-                  <FileText size={16} />
+                  <Mic size={18} className={isHandsFree ? 'animate-pulse' : ''} />
+                </button>
+                <div className="flex items-center bg-white/5 rounded-xl p-0.5 border border-white/10">
+                  <button 
+                    onClick={() => handleExportData('json')}
+                    className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-white/5 rounded-lg transition-all"
+                    title="Export as JSON"
+                  >
+                    <FileJson size={16} />
+                  </button>
+                  <button 
+                    onClick={() => handleExportData('text')}
+                    className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-white/5 rounded-lg transition-all"
+                    title="Export as Text"
+                  >
+                    <FileText size={16} />
+                  </button>
+                </div>
+                <button 
+                  onClick={() => setIsProfileOpen(true)}
+                  className={`p-2 rounded-xl transition-all bg-white/5 text-slate-400 hover:text-indigo-400 hover:bg-white/10 border border-white/10`}
+                  title="View Emotional Profile"
+                >
+                  <User size={18} />
+                </button>
+                <button 
+                  onClick={handleLogout}
+                  className="p-2 rounded-xl transition-all bg-white/5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-white/10"
+                  title="Logout"
+                >
+                  <LogOut size={18} />
                 </button>
               </div>
-              <button 
-                onClick={() => setIsProfileOpen(true)}
-                className={`p-2 rounded-xl transition-all bg-white/5 text-slate-400 hover:text-indigo-400 hover:bg-white/10 border border-white/10`}
-                title="View Emotional Profile"
-              >
-                <User size={18} />
-              </button>
-              <button 
-                onClick={() => setIsVoiceEnabled(!isVoiceEnabled)}
-                className={`p-2 rounded-xl transition-all ${isVoiceEnabled ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 'bg-white/5 text-slate-400 border border-white/10'}`}
-                title={isVoiceEnabled ? 'Disable Voice Response' : 'Enable Voice Response'}
-              >
-                {isVoiceEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
-              </button>
-              <button 
-                onClick={() => setMessages([])}
-                className="text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-slate-300 transition-colors px-2"
-              >
-                Clear
-              </button>
             </div>
+          
+          {/* Emotional Pulse Visualizer */}
+          <div className="px-6 py-2 flex items-center justify-center bg-gradient-to-b from-white/5 to-transparent">
+             <div className="relative flex items-center justify-center w-full max-w-[200px] h-12">
+               <AnimatePresence mode="wait">
+                 {(isListening || isSpeaking) && (
+                   <motion.div
+                     initial={{ opacity: 0, scale: 0.8 }}
+                     animate={{ opacity: 1, scale: 1 }}
+                     exit={{ opacity: 0, scale: 0.8 }}
+                     className="flex items-center gap-1"
+                   >
+                     {[...Array(12)].map((_, i) => (
+                       <motion.div
+                         key={i}
+                         animate={{ 
+                           height: [8, 24, 8],
+                           opacity: [0.3, 1, 0.3],
+                         }}
+                         transition={{ 
+                           duration: 1, 
+                           repeat: Infinity, 
+                           delay: i * 0.1,
+                           ease: "easeInOut" 
+                         }}
+                         className={`w-1 rounded-full ${
+                           isSpeaking 
+                             ? (messages[messages.length-1]?.analysis?.emotion === 'Angry' ? 'bg-red-400' : 'bg-indigo-400')
+                             : 'bg-emerald-400'
+                         }`}
+                       />
+                     ))}
+                   </motion.div>
+                 )}
+                 {(!isListening && !isSpeaking) && (
+                   <motion.div
+                     initial={{ opacity: 0 }}
+                     animate={{ opacity: 1 }}
+                     className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.3em]"
+                   >
+                     System Idle • Awaiting Input
+                   </motion.div>
+                 )}
+               </AnimatePresence>
+             </div>
           </div>
           
           {/* Mode Selector */}
@@ -1066,10 +1360,122 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
                         ))}
                       </div>
                     </div>
+
+                    <div className="pt-4 border-t border-white/5 space-y-4">
+                      <label className="text-[9px] font-bold text-indigo-400 uppercase tracking-[0.2em] block">Advanced Voice Control</label>
+                      
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <label className="text-[8px] font-bold text-slate-500 uppercase tracking-widest block">Gemini Live Voice</label>
+                          <div className="grid grid-cols-3 gap-1.5 text-white">
+                            {(['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr'] as const).map((v) => (
+                              <button
+                                key={v}
+                                onClick={() => setLiveVoiceName(v)}
+                                className={`px-2 py-1.5 rounded-lg text-[9px] font-bold transition-all border ${
+                                  liveVoiceName === v
+                                    ? 'bg-indigo-500 text-white border-indigo-400'
+                                    : 'bg-white/5 text-slate-400 border-white/10 hover:border-indigo-500/30'
+                                }`}
+                              >
+                                {v}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[8px] font-bold text-slate-500 uppercase tracking-widest block">System Voice / Accent</label>
+                        <select 
+                          value={selectedVoiceURI}
+                          onChange={(e) => setSelectedVoiceURI(e.target.value)}
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[10px] text-slate-300 outline-none focus:border-indigo-500/50 transition-all appearance-none cursor-pointer"
+                        >
+                          <option value="">Default (Auto-Female)</option>
+                          {availableVoices.map((voice) => (
+                            <option key={voice.voiceURI} value={voice.voiceURI}>
+                              {voice.name} ({voice.lang})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-[8px] font-bold text-slate-500 uppercase tracking-widest flex justify-between">
+                            <span>Pitch</span>
+                            <span className="text-indigo-400">{voicePitch.toFixed(1)}</span>
+                          </label>
+                          <input 
+                            type="range"
+                            min="0.5"
+                            max="2.0"
+                            step="0.1"
+                            value={voicePitch}
+                            onChange={(e) => setVoicePitch(parseFloat(e.target.value))}
+                            className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[8px] font-bold text-slate-500 uppercase tracking-widest flex justify-between">
+                            <span>Speed</span>
+                            <span className="text-indigo-400">{voiceRate.toFixed(1)}</span>
+                          </label>
+                          <input 
+                            type="range"
+                            min="0.5"
+                            max="2.0"
+                            step="0.1"
+                            value={voiceRate}
+                            onChange={(e) => setVoiceRate(parseFloat(e.target.value))}
+                            className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
                 <div className="pt-6 border-t border-white/10">
+                  <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2 mb-4 uppercase tracking-widest">
+                    <Radio className="w-4 h-4 text-indigo-400" />
+                    Social Intelligence
+                  </h3>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                       <label className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em] block">Instagram Handle</label>
+                       <input 
+                         type="text"
+                         value={instagramHandle}
+                         onChange={(e) => setInstagramHandle(e.target.value)}
+                         placeholder="@yourhandle"
+                         className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[10px] text-slate-300 outline-none focus:border-indigo-500/50 transition-all"
+                       />
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em] block">Facebook Profile</label>
+                       <input 
+                         type="text"
+                         value={facebookProfile}
+                         onChange={(e) => setFacebookProfile(e.target.value)}
+                         placeholder="facebook.com/yourprofile"
+                         className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[10px] text-slate-300 outline-none focus:border-indigo-500/50 transition-all"
+                       />
+                    </div>
+                     <div className="space-y-2">
+                       <label className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em] block">About for Gemini</label>
+                       <textarea 
+                         value={geminiInfo}
+                         onChange={(e) => setGeminiInfo(e.target.value)}
+                         placeholder="Tell Gemini more about your background, goals, or character..."
+                         className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[10px] text-slate-300 outline-none focus:border-indigo-500/50 transition-all h-20 resize-none"
+                       />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-6 pb-6 pt-2 border-t border-white/10">
                   <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2 mb-4 uppercase tracking-widest">
                     <Sparkles className="w-4 h-4 text-indigo-400" />
                     Learned Essence
@@ -1120,6 +1526,8 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
           </motion.div>
         )}
       </AnimatePresence>
+        </>
+      )}
     </div>
   );
 }

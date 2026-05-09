@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and settings",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "assistantMode": { "type": "string", "enum": ["Empathetic", "Analytical", "Cheerful", "Gentle"] },
+        "responseTone": { "type": "string", "enum": ["Balanced", "Concise", "Detailed", "Compassionate"] },
+        "voiceType": { "type": "string", "enum": ["Soothing", "Energetic", "Calm", "Professional"] },
+        "voicePitch": { "type": "number" },
+        "voiceRate": { "type": "number" },
+        "selectedVoiceURI": { "type": "string" },
+        "liveVoiceName": { "type": "string" },
+        "isVoiceEnabled": { "type": "boolean" },
+        "instagramHandle": { "type": "string" },
+        "facebookProfile": { "type": "string" },
+        "geminiInfo": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Individual chat message",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "assistant"] },
+        "content": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "emotion": { "type": "string" }
+      },
+      "required": ["id", "role", "content", "timestamp"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and settings"
+    },
+    "users/{userId}/messages": {
+      "schema": "Message",
+      "description": "User's chat history"
+    }
+  }
+}
