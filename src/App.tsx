@@ -101,6 +101,7 @@ export default function App() {
   const [facebookProfile, setFacebookProfile] = useState('');
   const [geminiInfo, setGeminiInfo] = useState('');
   const [language, setLanguage] = useState('en-US');
+  const [micVolume, setMicVolume] = useState(0);
   
   // Veo State
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
@@ -429,6 +430,84 @@ export default function App() {
       };
     }
   }, [language]); // Re-initialize when language changes
+
+  // Track user microphone volume in real-time when in listening mode
+  useEffect(() => {
+    if (!isListening) {
+      setMicVolume(0);
+      return;
+    }
+
+    let audioCtx: AudioContext | null = null;
+    let analyser: AnalyserNode | null = null;
+    let source: MediaStreamAudioSourceNode | null = null;
+    let stream: MediaStream | null = null;
+    let animationFrameId: number;
+
+    const startVolumeMeter = async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioContextClass) return;
+
+        audioCtx = new AudioContextClass();
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+
+        source = audioCtx.createMediaStreamSource(stream);
+        source.connect(analyser);
+
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        const updateVolume = () => {
+          if (!analyser || !audioCtx) return;
+          analyser.getByteTimeDomainData(dataArray);
+
+          // Calculate Root Mean Square (RMS) deviation from silent bias (128)
+          let sumSquares = 0;
+          for (let i = 0; i < bufferLength; i++) {
+            const deviation = dataArray[i] - 128;
+            sumSquares += deviation * deviation;
+          }
+          const rms = Math.sqrt(sumSquares / bufferLength);
+
+          // Standardize and normalize volume relative to voice registers
+          const normalizedVolume = Math.min(rms / 40, 1);
+          setMicVolume(normalizedVolume);
+
+          animationFrameId = requestAnimationFrame(updateVolume);
+        };
+
+        updateVolume();
+      } catch (err) {
+        console.warn("Could not retrieve volume stream for visualization:", err);
+      }
+    };
+
+    startVolumeMeter();
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      if (source) {
+        try {
+          source.disconnect();
+        } catch (e) {}
+      }
+      if (audioCtx) {
+        if (audioCtx.state !== 'closed') {
+          audioCtx.close();
+        }
+      }
+      if (stream) {
+        stream.getTracks().forEach(track => {
+          try {
+            track.stop();
+          } catch (e) {}
+        });
+      }
+    };
+  }, [isListening]);
 
   const toggleListening = () => {
     if (!recognitionRef.current) {
@@ -1493,17 +1572,42 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
         {/* Input Area */}
         <div className="p-6 bg-white/5 border-t border-white/10 backdrop-blur-xl">
           <div className="relative flex items-center gap-3">
-            <button
-              onClick={toggleListening}
-              className={`p-3 rounded-2xl transition-all ${
-                isListening
-                  ? 'bg-red-500/20 text-red-400 animate-pulse ring-1 ring-red-500/50'
-                  : 'bg-white/5 text-slate-500 hover:bg-white/10 border border-white/10'
-              }`}
-              title={isListening ? 'Stop Listening' : 'Start Voice Input'}
-            >
-              {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-            </button>
+            <div className="relative flex items-center gap-2">
+              <button
+                onClick={toggleListening}
+                className={`p-3 rounded-2xl transition-all ${
+                  isListening
+                    ? 'bg-red-500/20 text-red-400 ring-1 ring-red-500/50'
+                    : 'bg-white/5 text-slate-500 hover:bg-white/10 border border-white/10'
+                }`}
+                title={isListening ? 'Stop Listening' : 'Start Voice Input'}
+              >
+                {isListening ? <MicOff className="w-5 h-5 animate-pulse" /> : <Mic className="w-5 h-5" />}
+              </button>
+
+              {/* Real-time mic volume feedback representation */}
+              <AnimatePresence>
+                {isListening && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.8, width: 0, marginRight: 0 }}
+                    animate={{ opacity: 1, scale: 1, width: 'auto', marginRight: 4 }}
+                    exit={{ opacity: 0, scale: 0.8, width: 0, marginRight: 0 }}
+                    className="flex items-center gap-[3px] h-8 px-2.5 bg-red-400/10 border border-red-400/20 rounded-xl overflow-hidden"
+                  >
+                    {[0.6, 1.2, 0.8, 1.4].map((mult, id) => {
+                      const computedHeight = Math.max(4, Math.min(24, Math.round(4 + micVolume * 22 * mult)));
+                      return (
+                        <div
+                          key={id}
+                          className="w-[3px] rounded-full bg-red-400 transition-all duration-75"
+                          style={{ height: `${computedHeight}px` }}
+                        />
+                      );
+                    })}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
             <div className="relative flex-1 flex items-center">
               <div className="absolute left-4 z-10 flex items-center pointer-events-none">
                 <AnimatePresence mode="wait">
