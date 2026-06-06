@@ -7,8 +7,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Send, Smile, Frown, Angry, Ghost, Meh, Zap, Loader2, MessageSquare, Info, HelpCircle, AlertCircle, Mic, MicOff, ThumbsUp, ThumbsDown, Settings, Volume2, VolumeX, Sparkles, Target, ShieldAlert, Wind, User, Trash2, X, Download, FileJson, FileText, Radio, Power, LogOut, Video, Clapperboard, Play, Maximize2, Mail, Lock } from 'lucide-react';
 import { GoogleGenAI, Type, Modality, LiveServerMessage } from "@google/genai";
-import { auth, db, handleFirestoreError, OperationType } from './lib/firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInAnonymously, onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
+import { auth, db, googleProvider, handleFirestoreError, OperationType } from './lib/firebase';
+import { signInWithPopup, onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, query, orderBy, onSnapshot, addDoc, deleteDoc, getDocs, updateDoc, getDocFromServer, serverTimestamp } from 'firebase/firestore';
 
 // Initialize Gemini API
@@ -104,9 +104,6 @@ export default function App() {
   const [micVolume, setMicVolume] = useState(0);
 
   // Authentication State
-  const [isSignUpFlow, setIsSignUpFlow] = useState(false);
-  const [authEmail, setAuthEmail] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   
@@ -252,74 +249,14 @@ export default function App() {
     }
   };
 
-  const handleEmailLogin = async (e: any) => {
-    e.preventDefault();
-    if (!authEmail.trim() || !authPassword.trim()) {
-      setAuthError('Email and password are required.');
-      return;
-    }
+  const handleGoogleLogin = async () => {
     setAuthError('');
     setIsAuthSubmitting(true);
     try {
-      await signInWithEmailAndPassword(auth, authEmail, authPassword);
-      // Success will trigger the onAuthStateChanged listener
+      await signInWithPopup(auth, googleProvider);
     } catch (error: any) {
-      console.error('Email sign in failed:', error);
-      if (error.code === 'auth/wrong-password') {
-        setAuthError('Incorrect password. Please try again.');
-      } else if (error.code === 'auth/user-not-found') {
-        setAuthError('No account found with this email. Please check or sign up.');
-      } else if (error.code === 'auth/invalid-email') {
-        setAuthError('Invalid email address format.');
-      } else if (error.code === 'auth/invalid-credential') {
-        setAuthError('Invalid email or password combination.');
-      } else {
-        setAuthError(error.message || 'Failed to sign in. Please try again.');
-      }
-    } finally {
-      setIsAuthSubmitting(false);
-    }
-  };
-
-  const handleEmailSignUp = async (e: any) => {
-    e.preventDefault();
-    if (!authEmail.trim() || !authPassword.trim()) {
-      setAuthError('Email and password are required.');
-      return;
-    }
-    if (authPassword.length < 6) {
-      setAuthError('Password must be at least 6 characters long.');
-      return;
-    }
-    setAuthError('');
-    setIsAuthSubmitting(true);
-    try {
-      await createUserWithEmailAndPassword(auth, authEmail, authPassword);
-      // Success will trigger the onAuthStateChanged listener
-    } catch (error: any) {
-      console.error('Email sign up failed:', error);
-      if (error.code === 'auth/email-already-in-use') {
-        setAuthError('Email is already in use by another account.');
-      } else if (error.code === 'auth/invalid-email') {
-        setAuthError('Invalid email address format.');
-      } else if (error.code === 'auth/weak-password') {
-        setAuthError('Password is too weak. Please choose a stronger password.');
-      } else {
-        setAuthError(error.message || 'Failed to register. Please try again.');
-      }
-    } finally {
-      setIsAuthSubmitting(false);
-    }
-  };
-
-  const handleGuestLogin = async () => {
-    setAuthError('');
-    setIsAuthSubmitting(true);
-    try {
-      await signInAnonymously(auth);
-    } catch (error: any) {
-      console.error('Guest login failed:', error);
-      setAuthError('Failed to sign in as a guest. Please try again.');
+      console.error('Google login failed:', error);
+      setAuthError(error.message || 'Failed to sign in with Google. Please verify your connection and try again.');
     } finally {
       setIsAuthSubmitting(false);
     }
@@ -1207,7 +1144,7 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md glass-card rounded-3xl p-8 space-y-6 text-center my-auto border border-white/10 shadow-[0_15px_30px_rgba(0,0,0,0.5)] bg-slate-900/60 backdrop-blur-2xl"
+          className="w-full max-w-sm glass-card rounded-3xl p-8 space-y-8 text-center my-auto border border-white/10 shadow-[0_15px_30px_rgba(0,0,0,0.5)] bg-slate-900/60 backdrop-blur-2xl"
         >
           <div className="bg-indigo-500/20 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto border border-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.25)]">
             <MessageSquare className="text-indigo-400 w-8 h-8" />
@@ -1215,50 +1152,16 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
           <div className="space-y-2">
             <h1 className="text-3xl font-extrabold aesthetic-gradient-text tracking-tight font-sans">Emotional Intelligence</h1>
             <p className="text-slate-400 text-sm font-medium">
-              {isSignUpFlow ? 'Create a secure space to analyze feelings.' : 'Sign in to sync your emotional profile safely.'}
+              Sign in with Google to securely sync your emotional profile across devices.
             </p>
           </div>
 
-          <form onSubmit={isSignUpFlow ? handleEmailSignUp : handleEmailLogin} className="space-y-4 text-left">
-            <div className="space-y-1">
-              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider pl-1 font-mono">Email address</label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-slate-500">
-                  <Mail size={16} />
-                </span>
-                <input
-                  required
-                  type="email"
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                  placeholder="name@example.com"
-                  className="w-full glass-input rounded-xl py-3 pl-11 pr-4 text-sm text-white placeholder-slate-500 border border-white/5 bg-white/5 focus:bg-white/10 focus:border-indigo-500/50 outline-none transition-all"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider pl-1 font-mono">Password</label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-slate-500">
-                  <Lock size={16} />
-                </span>
-                <input
-                  required
-                  type="password"
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full glass-input rounded-xl py-3 pl-11 pr-4 text-sm text-white placeholder-slate-500 border border-white/5 bg-white/5 focus:bg-white/10 focus:border-indigo-500/50 outline-none transition-all"
-                />
-              </div>
-            </div>
-
+          <div className="space-y-4">
             {authError && (
               <motion.div 
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="p-3 bg-red-500/15 border border-red-500/35 rounded-xl flex items-start gap-2.5 text-xs text-red-300"
+                className="p-3 bg-red-500/15 border border-red-500/35 rounded-xl flex items-start gap-2.5 text-xs text-red-300 text-left"
               >
                 <AlertCircle size={16} className="mt-0.5 shrink-0" />
                 <span>{authError}</span>
@@ -1266,43 +1169,23 @@ Analysis: { "emotion": "Passive-Aggressive", "confidence": 0.92, "reason": "The 
             )}
 
             <button
-              type="submit"
+              onClick={handleGoogleLogin}
               disabled={isAuthSubmitting}
-              className="w-full py-4 px-6 bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 border border-indigo-400/20 rounded-xl flex items-center justify-center gap-2 font-bold text-white shadow-lg shadow-indigo-500/10 hover:shadow-indigo-500/25 active:scale-[0.98] transition-all cursor-pointer"
+              className="w-full py-4 px-6 bg-white border border-slate-200 hover:bg-slate-50 text-slate-900 rounded-2xl flex items-center justify-center gap-3 transition-all font-bold text-sm active:scale-[0.98] cursor-pointer shadow-md shadow-black/10"
             >
               {isAuthSubmitting ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : isSignUpFlow ? (
-                'Create Premium Account'
+                <Loader2 size={18} className="animate-spin text-indigo-500" />
               ) : (
-                'Sign In Securely'
+                <>
+                  <img 
+                    src="https://www.google.com/favicon.ico" 
+                    className="w-5 h-5" 
+                    alt="Google" 
+                    referrerPolicy="no-referrer" 
+                  />
+                  Continue with Google
+                </>
               )}
-            </button>
-          </form>
-
-          <div className="flex flex-col gap-4 text-center">
-            <button
-              onClick={() => {
-                setAuthError('');
-                setIsSignUpFlow(!isSignUpFlow);
-              }}
-              className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold transition-colors cursor-pointer"
-            >
-              {isSignUpFlow ? 'Already have an account? Sign In' : 'Need an account? Sign Up instead'}
-            </button>
-
-            <div className="relative flex py-2 items-center">
-              <div className="flex-grow border-t border-white/5"></div>
-              <span className="flex-shrink mx-4 text-[10px] text-slate-500 uppercase tracking-widest font-bold">Or</span>
-              <div className="flex-grow border-t border-white/5"></div>
-            </div>
-
-            <button
-              onClick={handleGuestLogin}
-              disabled={isAuthSubmitting}
-              className="w-full py-3 px-6 bg-white/5 border border-white/15 rounded-xl flex items-center justify-center gap-2 hover:bg-white/10 hover:border-white/20 transition-all font-bold text-slate-300 text-xs active:scale-[0.98] cursor-pointer"
-            >
-              Continue anonymously as Guest
             </button>
           </div>
 
